@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import Signup from "../pages/Signup";
 import Login from "../pages/Login";
+import AdminPage from "../admin/AdminPage";
+import ProtectedRoute from "../admin/ProtectedRoute";
 
 export default function RouteApp() {
   return (
@@ -18,6 +20,14 @@ export default function RouteApp() {
         <Route 
             path="/login" 
             element={<Login />} 
+        />
+        <Route
+            path="/admin"
+            element={
+              <ProtectedRoute role="admin">
+                <AdminPage />
+              </ProtectedRoute>
+            }
         />
       </Routes>
     </BrowserRouter>

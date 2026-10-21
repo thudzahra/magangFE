@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Alert, Button, Card, Label, TextInput } from "flowbite-react";
+import { login } from "../admin/auth";
 
 // Warna: #E6E6E6 background | putih card | #404E3B teks & tombol | #7B9669 border | #BAC8B1 hover
 const inputTheme = {
@@ -29,9 +30,11 @@ function EyeIcon({ off }) {
 
 export default function Login() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [form, setForm] = useState({ email: location.state?.email || "", password: "" });
   const [errors, setErrors] = useState({});
   const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState(
     location.state?.justRegistered ? { type: "ok", text: "Akun berhasil dibuat. Silakan login." } : null
   );
@@ -41,7 +44,7 @@ export default function Login() {
     setErrors((er) => ({ ...er, [field]: "" }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const email = form.email.trim().toLowerCase();
     const er = {};
@@ -51,17 +54,20 @@ export default function Login() {
     setErrors(er);
     if (Object.keys(er).length) return;
 
-    // TODO: ganti bagian demo ini dengan fetch ke endpoint login (kirim email + password)
-    let users = {};
-    try { users = JSON.parse(localStorage.getItem("demo_users") || "{}"); } catch { /* abaikan */ }
-    const u = users[email];
-    if (!u || u.password !== form.password) {
-      setMsg({ type: "no", text: "Email atau password salah." });
-      return;
+    setLoading(true);
+    setMsg(null);
+    try {
+      // POST /api/login -> simpan token & role (lihat src/admin/auth.js)
+      const { role } = await login(email, form.password);
+      navigate(role === "admin" ? "/admin" : "/dashboard-mahasiswa", { replace: true });
+    } catch (err) {
+      setMsg({
+        type: "no",
+        text: err instanceof TypeError ? "Tidak dapat terhubung ke server." : err.message,
+      });
+    } finally {
+      setLoading(false);
     }
-
-    setMsg({ type: "ok", text: `Login berhasil. Selamat datang, ${u.nama}!` });
-    // TODO: simpan token lalu navigate("/dashboard-mahasiswa")
   };
 
   return (
@@ -114,6 +120,7 @@ export default function Login() {
 
           <Button
             type="submit"
+            disabled={loading}
             className="w-full border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
           >
             Masuk

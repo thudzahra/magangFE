@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button, Card, Label, TextInput } from "flowbite-react";
+import { register } from "../admin/auth";
 
 // Warna: #E6E6E6 background | putih card | #404E3B teks & tombol | #7B9669 border | #BAC8B1 hover
 const inputTheme = {
@@ -27,6 +28,7 @@ function EyeIcon({ off }) {
   );
 }
 
+
 // Huruf pertama tiap kata otomatis kapital (contoh: "budi santoso" -> "Budi Santoso")
 const capitalizeWords = (str) => str.replace(/(^|\s)(\S)/g, (_, space, ch) => space + ch.toUpperCase());
 
@@ -35,6 +37,8 @@ export default function Signup() {
   const [form, setForm] = useState({ nama: "", email: "", nim: "", password: "" });
   const [errors, setErrors] = useState({});
   const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [formError, setFormError] = useState("");
 
   const update = (field) => (e) => {
     let value = e.target.value;
@@ -44,7 +48,7 @@ export default function Signup() {
     setErrors((er) => ({ ...er, [field]: "" }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const nama = form.nama.trim();
     const email = form.email.trim().toLowerCase();
@@ -60,19 +64,33 @@ export default function Signup() {
     else if (form.password.length < 8) er.password = "Password minimal 8 karakter.";
 
     setErrors(er);
+    setFormError("");
     if (Object.keys(er).length) return;
 
-    // TODO: ganti bagian demo ini dengan fetch ke endpoint register (kirim nama + email + nim + password)
-    let users = {};
-    try { users = JSON.parse(localStorage.getItem("demo_users") || "{}"); } catch { /* abaikan */ }
-    if (users[email]) {
-      setErrors({ email: "Email ini sudah terdaftar." });
-      return;
+    setLoading(true);
+    try {
+      // POST /api/register (lihat src/admin/auth.js)
+      await register({
+        name: nama,
+        nim,
+        email,
+        password: form.password,
+        password_confirmation: form.password, // form belum punya kolom konfirmasi
+      });
+      navigate("/login", { state: { email, justRegistered: true } });
+    } catch (err) {
+      if (err instanceof TypeError) {
+        setFormError("Tidak dapat terhubung ke server.");
+      } else {
+        // Error validasi dari BE (key BE -> key form)
+        const fe = err.fieldErrors ?? {};
+        const mapped = { nama: fe.name, email: fe.email, nim: fe.nim, password: fe.password };
+        if (Object.values(mapped).some(Boolean)) setErrors(mapped);
+        else setFormError(err.message);
+      }
+    } finally {
+      setLoading(false);
     }
-    users[email] = { nama, nim, password: form.password };
-    try { localStorage.setItem("demo_users", JSON.stringify(users)); } catch { /* abaikan */ }
-
-    navigate("/login", { state: { email, justRegistered: true } });
   };
 
   return (
@@ -152,10 +170,13 @@ export default function Signup() {
 
           <Button
             type="submit"
+            disabled={loading}
             className="w-full border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
           >
             Daftar
           </Button>
+
+          {formError && <p className="mt-2 text-center text-xs font-medium text-[#b42318]">{formError}</p>}
 
           <p className="mt-4 text-center text-sm text-[#404E3B]">
             Sudah punya akun?{" "}
