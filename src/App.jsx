@@ -1,11 +1,7 @@
-import { Button } from "flowbite-react"
+import RouteApp from "./routes/Route"
 
 function App() {
-  return (
-    <>
-      <Button color="purple">Purple</Button>
-    </>
-  )
+  return <RouteApp />
 }
 
 export default App
