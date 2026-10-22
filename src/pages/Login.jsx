@@ -1,6 +1,12 @@
 import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Alert, Button, Card, Label, TextInput } from "flowbite-react";
+
+// Halaman tujuan setelah login, sesuai role dari API
+const ROLE_HOME = {
+  mahasiswa: "/form-pengajuan",
+  admin: "/dashboard-admin",
+};
 
 // Warna: #E6E6E6 background | putih card | #404E3B teks & tombol | #7B9669 border | #BAC8B1 hover
 const inputTheme = {
@@ -29,6 +35,8 @@ function EyeIcon({ off }) {
 
 export default function Login() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ email: location.state?.email || "", password: "" });
   const [errors, setErrors] = useState({});
   const [showPw, setShowPw] = useState(false);
@@ -41,7 +49,7 @@ export default function Login() {
     setErrors((er) => ({ ...er, [field]: "" }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const email = form.email.trim().toLowerCase();
     const er = {};
@@ -51,17 +59,30 @@ export default function Login() {
     setErrors(er);
     if (Object.keys(er).length) return;
 
-    // TODO: ganti bagian demo ini dengan fetch ke endpoint login (kirim email + password)
-    let users = {};
-    try { users = JSON.parse(localStorage.getItem("demo_users") || "{}"); } catch { /* abaikan */ }
-    const u = users[email];
-    if (!u || u.password !== form.password) {
-      setMsg({ type: "no", text: "Email atau password salah." });
-      return;
-    }
+    setLoading(true);
+    setMsg(null);
+    try {
+      const response = await fetch("http://172.18.160.183:8000/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ email, password: form.password }),
+      });
+      const data = await response.json();
 
-    setMsg({ type: "ok", text: `Login berhasil. Selamat datang, ${u.nama}!` });
-    // TODO: simpan token lalu navigate("/dashboard-mahasiswa")
+      if (!response.ok) {
+        setMsg({ type: "no", text: data.message || "Email atau password salah." });
+        return;
+      }
+
+      // simpan token & data user, lalu pindah ke dashboard sesuai role
+      localStorage.setItem("token", data.token || data.access_token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+      navigate(ROLE_HOME[data.user?.role] || "/form-pengajuan", { replace: true });
+    } catch {
+      setMsg({ type: "no", text: "Tidak dapat terhubung ke server." });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -114,9 +135,10 @@ export default function Login() {
 
           <Button
             type="submit"
+            disabled={loading}
             className="w-full border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
           >
-            Masuk
+            {loading ? "Memproses..." : "Masuk"}
           </Button>
 
           {msg && (

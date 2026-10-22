@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import Signup from "../pages/Signup";
 import Login from "../pages/Login";
+import FormPengajuan from "../pages/FormPengajuan";
 
 export default function RouteApp() {
   return (
@@ -18,6 +19,10 @@ export default function RouteApp() {
         <Route 
             path="/login" 
             element={<Login />} 
+        />
+        <Route 
+          path="/form-pengajuan" 
+          element={<FormPengajuan />} 
         />
       </Routes>
     </BrowserRouter>
