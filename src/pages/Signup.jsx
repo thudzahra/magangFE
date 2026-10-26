@@ -14,7 +14,7 @@ const inputTheme = {
   },
 };
 
-const API_URL = import.meta.env.VITE_API_URL || "http://172.18.160.183:8000";
+const API_URL = import.meta.env.VITE_API_URL || "http://192.168.137.1:8000";
 
 const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
@@ -130,7 +130,7 @@ export default function Signup() {
             value={form.nama}
             onChange={update("nama")}
             placeholder="Nama lengkap"
-            color={errors.nama ? "failure" : "gray"}
+            color={errors.nama ? "failure" : "white"}
           />
           <p className="mb-2 min-h-5 text-xs font-medium text-[#b42318]">{errors.nama}</p>
 
@@ -143,7 +143,7 @@ export default function Signup() {
             value={form.email}
             onChange={update("email")}
             placeholder="nama@email.com"
-            color={errors.email ? "failure" : "gray"}
+            color={errors.email ? "failure" : "white"}
           />
           <p className="mb-2 min-h-5 text-xs font-medium text-[#b42318]">{errors.email}</p>
 
@@ -157,7 +157,7 @@ export default function Signup() {
             value={form.nim}
             onChange={update("nim")}
             placeholder="Contoh: E1410000000"
-            color={errors.nim ? "failure" : "gray"}
+            color={errors.nim ? "failure" : "white"}
           />
           <p className="mb-2 min-h-5 text-xs font-medium text-[#b42318]">{errors.nim}</p>
 
@@ -171,7 +171,7 @@ export default function Signup() {
               onChange={update("password")}
               placeholder="Minimal 8 karakter"
               autoComplete="new-password"
-              color={errors.password ? "failure" : "gray"}
+              color={errors.password ? "failure" : "white"}
             />
             <button
               type="button"
@@ -194,7 +194,7 @@ export default function Signup() {
               onChange={update("password_confirmation")}
               placeholder="Ulangi password"
               autoComplete="new-password"
-              color={errors.password_confirmation ? "failure" : "gray"}
+              color={errors.password_confirmation ? "failure" : "white"}
             />
             <button
               type="button"

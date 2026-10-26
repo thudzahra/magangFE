@@ -62,7 +62,7 @@ export default function Login() {
     setLoading(true);
     setMsg(null);
     try {
-      const response = await fetch("http://172.18.160.183:8000/api/login", {
+      const response = await fetch("http://192.168.137.1:8000/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ email, password: form.password }),
@@ -106,7 +106,7 @@ export default function Login() {
             value={form.email}
             onChange={update("email")}
             placeholder="nama@email.com"
-            color={errors.email ? "failure" : "gray"}
+            color={errors.email ? "failure" : "white"}
           />
           <p className="mb-2 min-h-5 text-xs font-medium text-[#b42318]">{errors.email}</p>
 
@@ -120,7 +120,7 @@ export default function Login() {
               onChange={update("password")}
               placeholder="Password"
               autoComplete="current-password"
-              color={errors.password ? "failure" : "gray"}
+              color={errors.password ? "failure" : "white"}
             />
             <button
               type="button"
