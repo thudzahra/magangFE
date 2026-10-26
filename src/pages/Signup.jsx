@@ -15,6 +15,8 @@ const inputTheme = {
   },
 };
 
+
+
 const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
 // Ikon mata untuk lihat / sembunyikan password
@@ -28,17 +30,22 @@ function EyeIcon({ off }) {
   );
 }
 
-
 // Huruf pertama tiap kata otomatis kapital (contoh: "budi santoso" -> "Budi Santoso")
 const capitalizeWords = (str) => str.replace(/(^|\s)(\S)/g, (_, space, ch) => space + ch.toUpperCase());
 
 export default function Signup() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ nama: "", email: "", nim: "", password: "" });
+  const [form, setForm] = useState({
+    nama: "",
+    email: "",
+    nim: "",
+    password: "",
+    password_confirmation: "",
+  });
   const [errors, setErrors] = useState({});
   const [showPw, setShowPw] = useState(false);
+  const [showPw2, setShowPw2] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [formError, setFormError] = useState("");
 
   const update = (field) => (e) => {
     let value = e.target.value;
@@ -59,35 +66,38 @@ export default function Signup() {
     if (!email) er.email = "Email wajib diisi.";
     else if (!isEmail(email)) er.email = "Format email tidak valid.";
     if (!nim) er.nim = "NIM wajib diisi.";
-    else if (!/^[A-Z0-9]{5,20}$/.test(nim)) er.nim = "NIM hanya huruf dan angka (5–20 karakter).";
+    else if (!/^[A-Z0-9]{11}$/.test(nim)) er.nim = "NIM harus 11 karakter.";
     if (!form.password) er.password = "Password wajib diisi.";
     else if (form.password.length < 8) er.password = "Password minimal 8 karakter.";
+    if (!form.password_confirmation) er.password_confirmation = "Konfirmasi password wajib diisi.";
+    else if (form.password !== form.password_confirmation) er.password_confirmation = "Konfirmasi password tidak cocok.";
 
     setErrors(er);
-    setFormError("");
     if (Object.keys(er).length) return;
 
-    setLoading(true);
+       setLoading(true);
     try {
-      // POST /api/register (lihat src/admin/auth.js)
       await register({
-        name: nama,
+        name: nama, // backend meminta "name", bukan "nama"
         nim,
         email,
         password: form.password,
-        password_confirmation: form.password, // form belum punya kolom konfirmasi
+        password_confirmation: form.password_confirmation,
       });
+
       navigate("/login", { state: { email, justRegistered: true } });
     } catch (err) {
-      if (err instanceof TypeError) {
-        setFormError("Tidak dapat terhubung ke server.");
-      } else {
-        // Error validasi dari BE (key BE -> key form)
-        const fe = err.fieldErrors ?? {};
-        const mapped = { nama: fe.name, email: fe.email, nim: fe.nim, password: fe.password };
-        if (Object.values(mapped).some(Boolean)) setErrors(mapped);
-        else setFormError(err.message);
-      }
+      // error validasi Laravel sudah diubah jadi { field: "pesan" } oleh auth.js
+      const apiErrors = {};
+      Object.entries(err.fieldErrors ?? {}).forEach(([key, msg]) => {
+        apiErrors[key === "name" ? "nama" : key] = msg;
+      });
+
+      setErrors(
+        Object.keys(apiErrors).length
+          ? apiErrors
+          : { form: err.message || "Pendaftaran gagal." }
+      );
     } finally {
       setLoading(false);
     }
@@ -114,7 +124,7 @@ export default function Signup() {
             value={form.nama}
             onChange={update("nama")}
             placeholder="Nama lengkap"
-            color={errors.nama ? "failure" : "gray"}
+            color={errors.nama ? "failure" : "white"}
           />
           <p className="mb-2 min-h-5 text-xs font-medium text-[#b42318]">{errors.nama}</p>
 
@@ -127,7 +137,7 @@ export default function Signup() {
             value={form.email}
             onChange={update("email")}
             placeholder="nama@email.com"
-            color={errors.email ? "failure" : "gray"}
+            color={errors.email ? "failure" : "white"}
           />
           <p className="mb-2 min-h-5 text-xs font-medium text-[#b42318]">{errors.email}</p>
 
@@ -135,13 +145,13 @@ export default function Signup() {
           <TextInput
             id="nim"
             theme={inputTheme}
-            maxLength={20}
+            maxLength={11}
             autoComplete="off"
             autoCapitalize="characters"
             value={form.nim}
             onChange={update("nim")}
-            placeholder="Contoh: E4411234"
-            color={errors.nim ? "failure" : "gray"}
+            placeholder="Contoh: E1410000000"
+            color={errors.nim ? "failure" : "white"}
           />
           <p className="mb-2 min-h-5 text-xs font-medium text-[#b42318]">{errors.nim}</p>
 
@@ -155,7 +165,7 @@ export default function Signup() {
               onChange={update("password")}
               placeholder="Minimal 8 karakter"
               autoComplete="new-password"
-              color={errors.password ? "failure" : "gray"}
+              color={errors.password ? "failure" : "white"}
             />
             <button
               type="button"
@@ -166,17 +176,39 @@ export default function Signup() {
               <EyeIcon off={showPw} />
             </button>
           </div>
-          <p className="mb-3 min-h-5 text-xs font-medium text-[#b42318]">{errors.password}</p>
+          <p className="mb-2 min-h-5 text-xs font-medium text-[#b42318]">{errors.password}</p>
+
+          <Label htmlFor="password_confirmation" className="mb-1 text-[#404E3B]">Konfirmasi Password</Label>
+          <div className="relative">
+            <TextInput
+              id="password_confirmation"
+              theme={inputTheme}
+              type={showPw2 ? "text" : "password"}
+              value={form.password_confirmation}
+              onChange={update("password_confirmation")}
+              placeholder="Ulangi password"
+              autoComplete="new-password"
+              color={errors.password_confirmation ? "failure" : "white"}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPw2((s) => !s)}
+              aria-label={showPw2 ? "Sembunyikan password" : "Lihat password"}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#404E3B] hover:text-[#7B9669]"
+            >
+              <EyeIcon off={showPw2} />
+            </button>
+          </div>
+          <p className="mb-3 min-h-5 text-xs font-medium text-[#b42318]">{errors.password_confirmation}</p>
 
           <Button
             type="submit"
             disabled={loading}
             className="w-full border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
           >
-            Daftar
+            {loading ? "Memproses..." : "Daftar"}
           </Button>
-
-          {formError && <p className="mt-2 text-center text-xs font-medium text-[#b42318]">{formError}</p>}
+          {errors.form && <p className="mt-2 text-sm font-medium text-[#b42318]">{errors.form}</p>}
 
           <p className="mt-4 text-center text-sm text-[#404E3B]">
             Sudah punya akun?{" "}

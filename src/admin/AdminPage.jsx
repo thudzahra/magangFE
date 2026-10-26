@@ -6,6 +6,7 @@ import {
 } from "flowbite-react";
 import { logout } from "./auth";
 import { getPengajuan, verifikasiPengajuan, tolakPengajuan } from "./adminApi";
+import { Link } from "react-router-dom";
 
 const tgl = (d) =>
   d ? new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(new Date(d)) : "-";
@@ -175,9 +176,11 @@ export default function AdminPage() {
         </NavbarBrand>
         <NavbarToggle />
         <NavbarCollapse>
-          <NavbarLink href="#" className="text-jade">Pengajuan</NavbarLink>
-          <NavbarLink href="#" className="text-jade">Alur</NavbarLink>
-          <NavbarLink href="#" active className="rounded-lg bg-mint !text-jade md:!bg-mint">Halaman admin</NavbarLink>
+         <NavbarCollapse>
+  <NavbarLink as={Link} to="/form-pengajuan" className="text-jade">Pengajuan</NavbarLink>
+  <NavbarLink as={Link} to="/form-pengajuan#alur" className="text-jade">Alur</NavbarLink>
+  <NavbarLink as={Link} to="/dashboard-admin" active className="rounded-lg bg-mint !text-jade md:!bg-mint">Halaman admin</NavbarLink>
+</NavbarCollapse>
         </NavbarCollapse>
         <Btn v="primary" className="hidden md:block" onClick={logout}>Keluar</Btn>
       </Navbar>

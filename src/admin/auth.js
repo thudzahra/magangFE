@@ -44,6 +44,12 @@ async function request(endpoint, options = {}) {
   return data;
 }
 
+const clearSession = () => {
+  localStorage.removeItem("token");
+  localStorage.removeItem("role");
+  localStorage.removeItem("user");
+};
+
 export async function login(email, password) {
   const data = await request("/login", {
     method: "POST",
@@ -59,31 +65,40 @@ export async function login(email, password) {
 
   localStorage.setItem("token", token);
 
-  let role = data.user?.role ?? data.data?.user?.role ?? data.role;
+  let user = data.user ?? data.data?.user;
+  let role = user?.role ?? data.role;
 
-  if (!role) {
+  // Kalau respons login tidak lengkap, ambil dari /me
+  if (!role || !user) {
     try {
       const me = await request("/me", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
-      role = me.role ?? me.user?.role ?? me.data?.role;
+      user = user ?? me.user ?? me.data ?? me;
+      role = role ?? user?.role ?? me.role;
     } catch (err) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("role");
+      clearSession();
       throw err;
     }
   }
 
   localStorage.setItem("role", role ?? "");
+  localStorage.setItem("user", JSON.stringify(user ?? {}));
 
-  return { role };
+  return { role, user };
 }
 
 export const getToken = () => localStorage.getItem("token");
 export const getRole = () => localStorage.getItem("role");
+
+export const getUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem("user")) || {};
+  } catch {
+    return {};
+  }
+};
 
 export async function logout() {
   try {
@@ -94,11 +109,10 @@ export async function logout() {
       },
     });
   } catch {
-    // Tetap hapus token lokal meskipun server tidak dapat dihubungi
+    // Tetap hapus data lokal meskipun server tidak dapat dihubungi
   }
 
-  localStorage.removeItem("token");
-  localStorage.removeItem("role");
+  clearSession();
   window.location.href = "/login";
 }
 

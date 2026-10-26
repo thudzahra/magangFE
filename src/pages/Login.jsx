@@ -3,6 +3,12 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Alert, Button, Card, Label, TextInput } from "flowbite-react";
 import { login } from "../admin/auth";
 
+// Halaman tujuan setelah login, sesuai role dari API
+const ROLE_HOME = {
+  mahasiswa: "/form-pengajuan",
+  admin: "/admin/dashboard",
+};
+
 // Warna: #E6E6E6 background | putih card | #404E3B teks & tombol | #7B9669 border | #BAC8B1 hover
 const inputTheme = {
   field: {
@@ -31,10 +37,10 @@ function EyeIcon({ off }) {
 export default function Login() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ email: location.state?.email || "", password: "" });
   const [errors, setErrors] = useState({});
   const [showPw, setShowPw] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState(
     location.state?.justRegistered ? { type: "ok", text: "Akun berhasil dibuat. Silakan login." } : null
   );
@@ -57,13 +63,15 @@ export default function Login() {
     setLoading(true);
     setMsg(null);
     try {
-      // POST /api/login -> simpan token & role (lihat src/admin/auth.js)
       const { role } = await login(email, form.password);
-      navigate(role === "admin" ? "/admin" : "/dashboard-mahasiswa", { replace: true });
+      navigate(ROLE_HOME[role] || "/form-pengajuan", { replace: true });
     } catch (err) {
       setMsg({
         type: "no",
-        text: err instanceof TypeError ? "Tidak dapat terhubung ke server." : err.message,
+        text:
+          err.status === 401
+            ? "Email atau password salah."
+            : err.message || "Tidak dapat terhubung ke server.",
       });
     } finally {
       setLoading(false);
@@ -91,7 +99,7 @@ export default function Login() {
             value={form.email}
             onChange={update("email")}
             placeholder="nama@email.com"
-            color={errors.email ? "failure" : "gray"}
+            color={errors.email ? "failure" : "white"}
           />
           <p className="mb-2 min-h-5 text-xs font-medium text-[#b42318]">{errors.email}</p>
 
@@ -105,7 +113,7 @@ export default function Login() {
               onChange={update("password")}
               placeholder="Password"
               autoComplete="current-password"
-              color={errors.password ? "failure" : "gray"}
+              color={errors.password ? "failure" : "white"}
             />
             <button
               type="button"
@@ -123,7 +131,7 @@ export default function Login() {
             disabled={loading}
             className="w-full border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
           >
-            Masuk
+            {loading ? "Memproses..." : "Masuk"}
           </Button>
 
           {msg && (
