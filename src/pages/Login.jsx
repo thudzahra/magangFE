@@ -62,7 +62,7 @@ export default function Login() {
     setLoading(true);
     setMsg(null);
     try {
-      const response = await fetch("http://192.168.137.1:8000/api/login", {
+      const response = await fetch("http://10.7.127.176:8000/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ email, password: form.password }),

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Alert, Button, FileInput, Label, Textarea, TextInput } from "flowbite-react";
 
-const API = "http://192.168.137.1:8000/api";
+const API = "http://10.7.127.176:8000/api";
 
 const ENDPOINT = {
   buat: "/pengajuan-magang",
@@ -265,6 +265,12 @@ export default function FormPengajuan() {
     }
   };
 
+  const batalSetujui = () => {
+    setDisetujui(false);
+    setVersiPreview((v) => v + 1); 
+    setErrors((er) => ({ ...er, ttd: "" }));
+  };
+
   const handleSubmit = async () => {
     const er = validate(3);
     setErrors(er);
@@ -294,21 +300,16 @@ export default function FormPengajuan() {
   return (
     <div className="min-h-screen bg-[#E6E6E6] text-[#404E3B]">
       <header className="border-b border-[#BAC8B1] bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
+        <div className="flex items-center justify-between gap-4 px-6 py-3 lg:px-40">
           <div className="flex items-center gap-2">
             <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#404E3B] text-sm font-bold text-[#E6E6E6]">SM</span>
-            <span className="text-lg font-bold">SIMAKA</span>
+            <span className="text-lg font-bold">SIMAGANG</span>
           </div>
-          <nav className="hidden items-center gap-2 text-sm font-semibold sm:flex">
-            <Link to="/form-pengajuan" className="rounded-lg bg-[#BAC8B1] px-3 py-2">Pengajuan</Link>
-            <a href="#alur" className="rounded-lg px-3 py-2 hover:bg-[#E6E6E6]">Alur</a>
-            <Link to="/dashboard-admin" className="rounded-lg px-3 py-2 hover:bg-[#E6E6E6]">Halaman admin</Link>
-          </nav>
           <Link
-            to="/form-pengajuan"
+            to="/login"
             className="rounded-lg bg-[#404E3B] px-4 py-2 text-sm font-bold text-[#E6E6E6] transition hover:bg-[#BAC8B1] hover:text-[#404E3B]"
           >
-            Ajukan sekarang
+            Log Out
           </Link>
         </div>
       </header>
@@ -427,9 +428,20 @@ export default function FormPengajuan() {
                   {!preview.loading && !preview.error && (preview.src || preview.srcDoc) && (
                     <iframe
                       title="Preview surat"
-                      src={preview.src || undefined}
+                      src={
+                        preview.src
+                          ? `${preview.src}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`
+                          : undefined
+                      }
                       srcDoc={preview.srcDoc || undefined}
-                      className="h-[600px] w-full"
+                      className="w-full rounded-lg border border-[#BAC8B1] bg-white"
+                      style={{ minHeight: 600 }}
+                      onLoad={(e) => {
+                        const doc = e.target.contentDocument;
+                        if (doc && preview.srcDoc) {
+                          e.target.style.height = doc.documentElement.scrollHeight + "px";
+                        }
+                      }}
                     />
                   )}
                 </div>
@@ -438,18 +450,31 @@ export default function FormPengajuan() {
                   <p className="mb-3 text-sm">
                     Periksa isi surat di atas. Tekan Setujui untuk menandatangani surat dengan QR code.
                   </p>
-                  {disetujui ? (
-                    <span className="w-fit rounded-lg bg-[#BAC8B1] px-3 py-2 text-sm font-semibold">✓ Surat sudah disetujui</span>
-                  ) : (
-                    <Button
-                      type="button"
-                      onClick={setujui}
-                      disabled={menyetujui || preview.loading || !!preview.error}
-                      className="w-fit border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
-                    >
-                      {menyetujui ? "Memproses..." : "Setujui"}
-                    </Button>
-                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {disetujui ? (
+                      <>
+                        <span className="w-fit rounded-lg bg-[#BAC8B1] px-3 py-2 text-sm font-semibold">
+                          ✓ Surat sudah disetujui
+                        </span>
+                        <Button
+                          type="button"
+                          onClick={batalSetujui}
+                          className="w-fit border border-[#404E3B] bg-transparent font-bold text-[#404E3B] hover:bg-[#404E3B] hover:text-[#E6E6E6]"
+                        >
+                          Batal setujui
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        type="button"
+                        onClick={setujui}
+                        disabled={menyetujui || preview.loading || !!preview.error}
+                        className="w-fit border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
+                      >
+                        {menyetujui ? "Memproses..." : "Setujui"}
+                      </Button>
+                    )}
+                  </div>
                 </Field>
               </div>
             )}
