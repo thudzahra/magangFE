@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Alert, Button, FileInput, Label, Textarea, TextInput } from "flowbite-react";
 
-const API = "http://10.7.127.176:8000/api";
+const API = "http://10.7.102.23:8000/api";
 
 const ENDPOINT = {
   buat: "/pengajuan-magang",
@@ -92,7 +92,6 @@ const ambilPreview = async (id) => {
   return { src: objectUrl, objectUrl };
 };
 
-// Validasi satu file berkas (wajib, ukuran, dan ekstensi)
 const validasiBerkas = (file, namaBerkas) => {
   if (!file) return `${namaBerkas} wajib diunggah.`;
   if (file.size > MAX_FILE_SIZE) return "Ukuran file maksimal 2 MB.";
@@ -265,10 +264,18 @@ export default function FormPengajuan() {
     }
   };
 
-  const batalSetujui = () => {
-    setDisetujui(false);
-    setVersiPreview((v) => v + 1); 
+  const batalSetujui = async () => {
+    setMenyetujui(true);
     setErrors((er) => ({ ...er, ttd: "" }));
+    try {
+      await panggilApi(ENDPOINT.tandaTangan(pengajuanId.current), { method: "DELETE" });
+      setDisetujui(false);
+      setVersiPreview((v) => v + 1);
+    } catch (err) {
+      setErrors((er) => ({ ...er, ttd: pesanDariError(err) }));
+    } finally {
+      setMenyetujui(false);
+    }
   };
 
   const handleSubmit = async () => {
