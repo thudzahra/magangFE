@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Alert, Button, FileInput, Label, Textarea, TextInput } from "flowbite-react";
 
-const API = "http://10.7.127.176:8000/api";
+const API = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api").replace(/\/+$/, "");
 
 const ENDPOINT = {
   buat: "/pengajuan-magang",
@@ -26,9 +26,10 @@ const STEPS = ["Data diri", "Tempat magang", "Tanda tangan", "Berkas & kirim"];
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 const EKSTENSI_BOLEH = ["pdf", "jpg", "jpeg", "png"];
 
+// Kelas dark: ikut diset supaya tampilan tetap hijau walau Windows/Chrome mode gelap
 const colors = {
-  gray: "border-[#7B9669] bg-[#E6E6E6] text-[#404E3B] placeholder-[#7a8575] focus:border-[#404E3B] focus:ring-[#7B9669]",
-  failure: "border-[#b42318] bg-[#E6E6E6] text-[#404E3B] placeholder-[#7a8575] focus:border-[#b42318] focus:ring-[#b42318]",
+  gray: "border-[#7B9669] bg-[#E6E6E6] text-[#404E3B] placeholder-[#7a8575] focus:border-[#404E3B] focus:ring-[#7B9669] dark:border-[#7B9669] dark:bg-[#E6E6E6] dark:text-[#404E3B] dark:placeholder-[#7a8575] dark:focus:border-[#404E3B] dark:focus:ring-[#7B9669]",
+  failure: "border-[#b42318] bg-[#E6E6E6] text-[#404E3B] placeholder-[#7a8575] focus:border-[#b42318] focus:ring-[#b42318] dark:border-[#b42318] dark:bg-[#E6E6E6] dark:text-[#404E3B] dark:placeholder-[#7a8575] dark:focus:border-[#b42318] dark:focus:ring-[#b42318]",
 };
 const inputTheme = { field: { input: { colors } } };
 const textareaTheme = { colors };
@@ -37,9 +38,16 @@ const capitalizeWords = (str) => str.replace(/(^|\s)(\S)/g, (_, space, ch) => sp
 
 const getUser = () => {
   try {
-    return JSON.parse(localStorage.getItem("user")) || {};
+    const raw = JSON.parse(localStorage.getItem("user")) || {};
+    const user = raw.user || raw.data || raw;
+
+    return {
+      name: user.name || user.nama || "",
+      nim: user.nim || user.NIM || "",
+      roles: user.roles || (user.role ? [user.role] : []),
+    };
   } catch {
-    return {};
+    return { name: "", nim: "", roles: [] };
   }
 };
 
@@ -92,7 +100,6 @@ const ambilPreview = async (id) => {
   return { src: objectUrl, objectUrl };
 };
 
-// Validasi satu file berkas (wajib, ukuran, dan ekstensi)
 const validasiBerkas = (file, namaBerkas) => {
   if (!file) return `${namaBerkas} wajib diunggah.`;
   if (file.size > MAX_FILE_SIZE) return "Ukuran file maksimal 2 MB.";
@@ -104,7 +111,7 @@ const validasiBerkas = (file, namaBerkas) => {
 function Field({ id, label, error, optional, children }) {
   return (
     <div className="flex flex-col">
-      <Label htmlFor={id} className="mb-1 font-semibold text-[#404E3B]">
+      <Label htmlFor={id} className="mb-1 font-semibold text-[#404E3B] dark:text-[#404E3B]">
         {label} {!optional && <span className="text-[#b42318]">*</span>}
       </Label>
       {children}
@@ -113,18 +120,33 @@ function Field({ id, label, error, optional, children }) {
   );
 }
 
+const btnPrimary =
+  "!border-0 !bg-[#404E3B] font-bold !text-[#E6E6E6] hover:!bg-[#BAC8B1] hover:!text-[#404E3B]";
+const btnOutline =
+  "!border !border-[#404E3B] !bg-transparent font-bold !text-[#404E3B] hover:!bg-[#404E3B] hover:!text-[#E6E6E6]";
+const btnBack =
+  "!border !border-[#7B9669] !bg-white font-semibold !text-[#404E3B] hover:!bg-[#BAC8B1]";
+
 export default function FormPengajuan() {
   const navigate = useNavigate();
-  const user = getUser();
   const pengajuanId = useRef(null);
   const snapshotDraft = useRef("");
   const [step, setStep] = useState(0);
-  const [form, setForm] = useState({
-    nama: user.name || "",
-    nim: (user.nim || "").toUpperCase(),
-    departemen: departemenDariNim(user.nim),
-    instansi: "", alamat_instansi: "", tanggal_mulai: "", tanggal_selesai: "",
-    bukti_spp: null, surat_rekomendasi: null,
+  const [form, setForm] = useState(() => {
+    const user = getUser();
+    const nim = (user.nim || "").toUpperCase();
+
+    return {
+      nama: user.name || "",
+      nim,
+      departemen: departemenDariNim(nim),
+      instansi: "",
+      alamat_instansi: "",
+      tanggal_mulai: "",
+      tanggal_selesai: "",
+      bukti_spp: null,
+      surat_rekomendasi: null,
+    };
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -133,6 +155,18 @@ export default function FormPengajuan() {
   const [menyetujui, setMenyetujui] = useState(false);
   const [versiPreview, setVersiPreview] = useState(0);
   const [preview, setPreview] = useState({ src: "", srcDoc: "", loading: false, error: "" });
+
+  // Guard: harus login dan berperan mahasiswa
+  useEffect(() => {
+    const { roles } = getUser();
+    if (!localStorage.getItem("token")) {
+      navigate("/login", { replace: true });
+      return;
+    }
+    if (roles.length && !roles.includes("mahasiswa")) {
+      navigate(roles.includes("admin") ? "/admin/dashboard" : "/login", { replace: true });
+    }
+  }, [navigate]);
 
   useEffect(() => {
     if (step !== 2 || !pengajuanId.current) return;
@@ -159,6 +193,13 @@ export default function FormPengajuan() {
     };
   }, [step, versiPreview]);
 
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("role");
+    navigate("/login", { replace: true });
+  };
+
   const update = (field) => (e) => {
     let value = e.target.files ? e.target.files[0] || null : e.target.value;
     if (field === "nama") value = capitalizeWords(value);
@@ -171,7 +212,7 @@ export default function FormPengajuan() {
     const er = {};
     if (s === 0) {
       if (!form.nama.trim()) er.nama = "Nama lengkap wajib diisi.";
-      if (!form.nim.trim()) er.nim = "NIM wajib diisi.";
+      if (!form.nim.trim()) er.nim = "NIM belum tersimpan di akun. Hubungi admin atau daftar ulang dengan NIM.";
       else if (!/^[A-Z0-9]{11}$/.test(form.nim.trim())) er.nim = "NIM harus 11 karakter (huruf dan angka).";
       if (!form.departemen) er.departemen = "Departemen tidak dikenali dari NIM.";
     }
@@ -265,6 +306,20 @@ export default function FormPengajuan() {
     }
   };
 
+  const batalSetujui = async () => {
+    setMenyetujui(true);
+    setErrors((er) => ({ ...er, ttd: "" }));
+    try {
+      await panggilApi(ENDPOINT.tandaTangan(pengajuanId.current), { method: "DELETE" });
+      setDisetujui(false);
+      setVersiPreview((v) => v + 1);
+    } catch (err) {
+      setErrors((er) => ({ ...er, ttd: pesanDariError(err) }));
+    } finally {
+      setMenyetujui(false);
+    }
+  };
+
   const handleSubmit = async () => {
     const er = validate(3);
     setErrors(er);
@@ -294,22 +349,18 @@ export default function FormPengajuan() {
   return (
     <div className="min-h-screen bg-[#E6E6E6] text-[#404E3B]">
       <header className="border-b border-[#BAC8B1] bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
+        <div className="flex items-center justify-between gap-4 px-6 py-3 lg:px-40">
           <div className="flex items-center gap-2">
             <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#404E3B] text-sm font-bold text-[#E6E6E6]">SM</span>
-            <span className="text-lg font-bold">SIMAKA</span>
+            <span className="text-lg font-bold">SIMAGANG</span>
           </div>
-          <nav className="hidden items-center gap-2 text-sm font-semibold sm:flex">
-            <Link to="/form-pengajuan" className="rounded-lg bg-[#BAC8B1] px-3 py-2">Pengajuan</Link>
-            <a href="#alur" className="rounded-lg px-3 py-2 hover:bg-[#E6E6E6]">Alur</a>
-            <Link to="/dashboard-admin" className="rounded-lg px-3 py-2 hover:bg-[#E6E6E6]">Halaman admin</Link>
-          </nav>
-          <Link
-            to="/form-pengajuan"
+          <button
+            type="button"
+            onClick={handleLogout}
             className="rounded-lg bg-[#404E3B] px-4 py-2 text-sm font-bold text-[#E6E6E6] transition hover:bg-[#BAC8B1] hover:text-[#404E3B]"
           >
-            Ajukan sekarang
-          </Link>
+            Log Out
+          </button>
         </div>
       </header>
 
@@ -427,9 +478,20 @@ export default function FormPengajuan() {
                   {!preview.loading && !preview.error && (preview.src || preview.srcDoc) && (
                     <iframe
                       title="Preview surat"
-                      src={preview.src || undefined}
+                      src={
+                        preview.src
+                          ? `${preview.src}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`
+                          : undefined
+                      }
                       srcDoc={preview.srcDoc || undefined}
-                      className="h-[600px] w-full"
+                      className="w-full rounded-lg border border-[#BAC8B1] bg-white"
+                      style={{ minHeight: 600 }}
+                      onLoad={(e) => {
+                        const doc = e.target.contentDocument;
+                        if (doc && preview.srcDoc) {
+                          e.target.style.height = doc.documentElement.scrollHeight + "px";
+                        }
+                      }}
                     />
                   )}
                 </div>
@@ -438,18 +500,32 @@ export default function FormPengajuan() {
                   <p className="mb-3 text-sm">
                     Periksa isi surat di atas. Tekan Setujui untuk menandatangani surat dengan QR code.
                   </p>
-                  {disetujui ? (
-                    <span className="w-fit rounded-lg bg-[#BAC8B1] px-3 py-2 text-sm font-semibold">✓ Surat sudah disetujui</span>
-                  ) : (
-                    <Button
-                      type="button"
-                      onClick={setujui}
-                      disabled={menyetujui || preview.loading || !!preview.error}
-                      className="w-fit border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
-                    >
-                      {menyetujui ? "Memproses..." : "Setujui"}
-                    </Button>
-                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {disetujui ? (
+                      <>
+                        <span className="w-fit rounded-lg bg-[#BAC8B1] px-3 py-2 text-sm font-semibold">
+                          ✓ Surat sudah disetujui
+                        </span>
+                        <Button
+                          type="button"
+                          onClick={batalSetujui}
+                          disabled={menyetujui}
+                          className={`w-fit ${btnOutline}`}
+                        >
+                          Batal setujui
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        type="button"
+                        onClick={setujui}
+                        disabled={menyetujui || preview.loading || !!preview.error}
+                        className={`w-fit ${btnPrimary}`}
+                      >
+                        {menyetujui ? "Memproses..." : "Setujui"}
+                      </Button>
+                    )}
+                  </div>
                 </Field>
               </div>
             )}
@@ -481,27 +557,18 @@ export default function FormPengajuan() {
 
             <div className="mt-6 flex items-center justify-between border-t border-[#BAC8B1] pt-5">
               {step > 0 ? (
-                <Button
-                  type="button" onClick={back} disabled={loading}
-                  className="border border-[#7B9669] bg-white font-semibold text-[#404E3B] hover:bg-[#BAC8B1]"
-                >
+                <Button type="button" onClick={back} disabled={loading} className={btnBack}>
                   ← Kembali
                 </Button>
               ) : (
                 <span />
               )}
               {step < STEPS.length - 1 ? (
-                <Button
-                  type="button" onClick={next} disabled={loading}
-                  className="border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
-                >
+                <Button type="button" onClick={next} disabled={loading} className={btnPrimary}>
                   {loading ? "Menyimpan..." : "Lanjut →"}
                 </Button>
               ) : (
-                <Button
-                  type="button" onClick={handleSubmit} disabled={loading}
-                  className="border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
-                >
+                <Button type="button" onClick={handleSubmit} disabled={loading} className={btnPrimary}>
                   {loading ? "Mengirim..." : "Kirim pengajuan"}
                 </Button>
               )}

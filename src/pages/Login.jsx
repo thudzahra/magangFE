@@ -1,21 +1,20 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Alert, Button, Card, Label, TextInput } from "flowbite-react";
-import { login } from "../admin/auth";
 
-// Halaman tujuan setelah login, sesuai role dari API
 const ROLE_HOME = {
   mahasiswa: "/form-pengajuan",
   admin: "/admin/dashboard",
+  atasan: "/atasan/dashboard", // sesuaikan dengan route atasan kamu
 };
 
-// Warna: #E6E6E6 background | putih card | #404E3B teks & tombol | #7B9669 border | #BAC8B1 hover
+// Kelas dark: ikut diset supaya tampilan tetap hijau walau Windows/Chrome mode gelap
 const inputTheme = {
   field: {
     input: {
       colors: {
-        gray: "border-[#7B9669] bg-[#E6E6E6] text-[#404E3B] placeholder-[#7a8575] focus:border-[#404E3B] focus:ring-[#7B9669]",
-        failure: "border-[#b42318] bg-[#E6E6E6] text-[#404E3B] placeholder-[#7a8575] focus:border-[#b42318] focus:ring-[#b42318]",
+        gray: "border-[#7B9669] bg-[#E6E6E6] text-[#404E3B] placeholder-[#7a8575] focus:border-[#404E3B] focus:ring-[#7B9669] dark:border-[#7B9669] dark:bg-[#E6E6E6] dark:text-[#404E3B] dark:placeholder-[#7a8575] dark:focus:border-[#404E3B] dark:focus:ring-[#7B9669]",
+        failure: "border-[#b42318] bg-[#E6E6E6] text-[#404E3B] placeholder-[#7a8575] focus:border-[#b42318] focus:ring-[#b42318] dark:border-[#b42318] dark:bg-[#E6E6E6] dark:text-[#404E3B] dark:placeholder-[#7a8575] dark:focus:border-[#b42318] dark:focus:ring-[#b42318]",
       },
     },
   },
@@ -23,10 +22,20 @@ const inputTheme = {
 
 const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
-// Ikon mata untuk lihat / sembunyikan password
 function EyeIcon({ off }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
       <circle cx="12" cy="12" r="3" />
       {off && <line x1="3" y1="3" x2="21" y2="21" />}
@@ -37,12 +46,18 @@ function EyeIcon({ off }) {
 export default function Login() {
   const location = useLocation();
   const navigate = useNavigate();
+
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ email: location.state?.email || "", password: "" });
+  const [form, setForm] = useState({
+    email: location.state?.email || "",
+    password: "",
+  });
   const [errors, setErrors] = useState({});
   const [showPw, setShowPw] = useState(false);
   const [msg, setMsg] = useState(
-    location.state?.justRegistered ? { type: "ok", text: "Akun berhasil dibuat. Silakan login." } : null
+    location.state?.justRegistered
+      ? { type: "ok", text: "Akun berhasil dibuat. Silakan login." }
+      : null
   );
 
   const update = (field) => (e) => {
@@ -52,26 +67,80 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     const email = form.email.trim().toLowerCase();
     const er = {};
+
     if (!email) er.email = "Email wajib diisi.";
     else if (!isEmail(email)) er.email = "Format email tidak valid.";
+
     if (!form.password) er.password = "Password wajib diisi.";
+
     setErrors(er);
     if (Object.keys(er).length) return;
 
     setLoading(true);
     setMsg(null);
+
     try {
-      const { role } = await login(email, form.password);
+      const BASE = (
+        import.meta.env.VITE_API_URL ||
+        "http://127.0.0.1:8000/api"
+      ).replace(/\/+$/, "");
+
+      const response = await fetch(`${BASE}/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          password: form.password,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            (response.status === 401
+              ? "Email atau password salah."
+              : "Gagal login. Silakan coba lagi.")
+        );
+      }
+
+      // Bersihkan sisa sesi lama supaya tidak tercampur akun lain
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      localStorage.removeItem("role");
+
+      const token = data.token || data.access_token || data.data?.token;
+      if (token) localStorage.setItem("token", token);
+
+      // Simpan objek user (dipakai halaman FormPengajuan untuk nama & NIM)
+      const user = data.user || data.data?.user || null;
+      if (user) localStorage.setItem("user", JSON.stringify(user));
+
+      // Backend memakai "roles" (array), tapi tetap dukung "role" (string)
+      const role =
+        user?.roles?.[0] ||
+        user?.role ||
+        data.roles?.[0] ||
+        data.role ||
+        data.data?.role;
+
+      if (role) localStorage.setItem("role", role);
+
       navigate(ROLE_HOME[role] || "/form-pengajuan", { replace: true });
     } catch (err) {
       setMsg({
         type: "no",
         text:
-          err.status === 401
-            ? "Email atau password salah."
-            : err.message || "Tidak dapat terhubung ke server.",
+          err instanceof TypeError
+            ? "Tidak dapat terhubung ke server."
+            : err.message || "Gagal login.",
       });
     } finally {
       setLoading(false);
@@ -80,17 +149,35 @@ export default function Login() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#E6E6E6] p-5">
-      <Card className="w-full max-w-md border-[#BAC8B1] bg-white shadow-xl">
-        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-1 text-[#404E3B]">
+      <Card className="w-full max-w-md border-[#BAC8B1] bg-white shadow-xl dark:border-[#BAC8B1] dark:bg-white">
+        <form
+          onSubmit={handleSubmit}
+          noValidate
+          className="flex flex-col gap-1 text-[#404E3B]"
+        >
           <h1 className="text-2xl font-bold">Masuk</h1>
-          <p className="mb-4 text-sm text-[#404E3B]">Masuk dengan email dan password kamu.</p>
+          <p className="mb-4 text-sm text-[#404E3B]">
+            Masuk dengan email dan password kamu.
+          </p>
 
           <div className="mb-4 flex rounded-lg border border-[#7B9669] p-1">
-            <Link to="/login" className="flex-1 rounded-md bg-[#404E3B] py-2 text-center text-sm font-semibold text-[#E6E6E6]">Login</Link>
-            <Link to="/signup" className="flex-1 rounded-md py-2 text-center text-sm font-semibold text-[#404E3B] transition hover:bg-[#BAC8B1]">Sign Up</Link>
+            <Link
+              to="/login"
+              className="flex-1 rounded-md bg-[#404E3B] py-2 text-center text-sm font-semibold text-[#E6E6E6]"
+            >
+              Login
+            </Link>
+            <Link
+              to="/signup"
+              className="flex-1 rounded-md py-2 text-center text-sm font-semibold text-[#404E3B] transition hover:bg-[#BAC8B1]"
+            >
+              Sign Up
+            </Link>
           </div>
 
-          <Label htmlFor="email" className="mb-1 text-[#404E3B]">Email</Label>
+          <Label htmlFor="email" className="mb-1 text-[#404E3B] dark:text-[#404E3B]">
+            Email
+          </Label>
           <TextInput
             id="email"
             theme={inputTheme}
@@ -99,11 +186,15 @@ export default function Login() {
             value={form.email}
             onChange={update("email")}
             placeholder="nama@email.com"
-            color={errors.email ? "failure" : "white"}
+            color={errors.email ? "failure" : "gray"}
           />
-          <p className="mb-2 min-h-5 text-xs font-medium text-[#b42318]">{errors.email}</p>
+          <p className="mb-2 min-h-5 text-xs font-medium text-[#b42318]">
+            {errors.email}
+          </p>
 
-          <Label htmlFor="password" className="mb-1 text-[#404E3B]">Password</Label>
+          <Label htmlFor="password" className="mb-1 text-[#404E3B] dark:text-[#404E3B]">
+            Password
+          </Label>
           <div className="relative">
             <TextInput
               id="password"
@@ -113,7 +204,7 @@ export default function Login() {
               onChange={update("password")}
               placeholder="Password"
               autoComplete="current-password"
-              color={errors.password ? "failure" : "white"}
+              color={errors.password ? "failure" : "gray"}
             />
             <button
               type="button"
@@ -124,12 +215,14 @@ export default function Login() {
               <EyeIcon off={showPw} />
             </button>
           </div>
-          <p className="mb-3 min-h-5 text-xs font-medium text-[#b42318]">{errors.password}</p>
+          <p className="mb-3 min-h-5 text-xs font-medium text-[#b42318]">
+            {errors.password}
+          </p>
 
           <Button
             type="submit"
             disabled={loading}
-            className="w-full border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
+            className="w-full !border-0 !bg-[#404E3B] font-bold !text-[#E6E6E6] hover:!bg-[#BAC8B1] hover:!text-[#404E3B]"
           >
             {loading ? "Memproses..." : "Masuk"}
           </Button>
@@ -148,7 +241,10 @@ export default function Login() {
 
           <p className="mt-4 text-center text-sm text-[#404E3B]">
             Belum punya akun?{" "}
-            <Link to="/signup" className="font-bold text-[#404E3B] underline hover:text-[#7B9669]">
+            <Link
+              to="/signup"
+              className="font-bold text-[#404E3B] underline hover:text-[#7B9669]"
+            >
               Daftar sekarang
             </Link>
           </p>
