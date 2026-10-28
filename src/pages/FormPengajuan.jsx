@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Alert, Button, FileInput, Label, Textarea, TextInput } from "flowbite-react";
 
-const API = "http://10.7.102.23:8000/api";
+const API = "http://10.6.66.154:8000/api";
 
 const ENDPOINT = {
   buat: "/pengajuan-magang",
