@@ -6,14 +6,21 @@ import { useEffect, useState } from "react";
 
 const API = (
   import.meta.env.VITE_API_URL ||
+<<<<<<< HEAD
   "http://10.6.74.85:8000/api"
+=======
+  "http://10.6.66.154:8000/api"
+>>>>>>> fe22be5bf0ae463fd7978172739fcc4dba416474
 ).replace(/\/+$/, "");
 
 const ENDPOINT = {
   daftar: "/admin/pengajuan-magang",
+  ringkasan: "/admin/pengajuan-magang/ringkasan",
   detail: (id) => `/admin/pengajuan-magang/${id}`,
   status: (id) => `/admin/pengajuan-magang/${id}/status`,
 };
+
+const PER_PAGE = 20;
 
 async function panggilApi(endpoint, { method = "GET", body } = {}) {
   const token = localStorage.getItem("token");
@@ -58,9 +65,7 @@ async function panggilApi(endpoint, { method = "GET", body } = {}) {
     }
 
     throw new Error(
-      data.message ||
-        validationErrors ||
-        `Request gagal (${response.status}).`
+      validationErrors || data.message || `Request gagal (${response.status}).`
     );
   }
 
@@ -83,7 +88,10 @@ function toArray(response) {
 function formatTanggal(value) {
   if (!value) return "-";
 
-  const date = new Date(value);
+  // "2026-11-02" dibaca sebagai tanggal lokal agar tidak bergeser hari
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T00:00:00`)
+    : new Date(value);
 
   if (Number.isNaN(date.getTime())) return value;
 
@@ -94,9 +102,111 @@ function formatTanggal(value) {
   }).format(date);
 }
 
-// Normalisasi status untuk tampilan.
-// Sesuaikan dengan nilai yang benar-benar dikirim backend.
-// Mengambil teks dari string atau object { value, label }.
+// Nomor halaman yang ditampilkan, contoh: [1, "...", 4, 5, 6, "...", 12]
+function daftarHalaman(sekarang, terakhir) {
+  const angka = [
+    ...new Set([1, terakhir, sekarang - 1, sekarang, sekarang + 1]),
+  ]
+    .filter((n) => n >= 1 && n <= terakhir)
+    .sort((a, b) => a - b);
+
+  const hasil = [];
+
+  angka.forEach((n, i) => {
+    if (i > 0 && n - angka[i - 1] > 1) hasil.push("...");
+    hasil.push(n);
+  });
+
+  return hasil;
+}
+
+// =====================================================
+// BERKAS
+// =====================================================
+
+const LABEL_BERKAS = {
+  "surat-pengajuan": "Surat pengajuan magang",
+  "bukti-spp": "Bukti pembayaran SPP",
+  "surat-rekomendasi": "Surat rekomendasi",
+  "surat-magang": "Surat pengantar magang",
+};
+
+// Berkas yang selalu ditampilkan (diberi keterangan jika belum ada)
+const BERKAS_WAJIB = ["surat-pengajuan", "bukti-spp", "surat-rekomendasi"];
+
+// Cadangan jika backend mengirim link langsung (bukan array "berkas")
+const FIELD_LAMA = {
+  "surat-pengajuan": "surat_pengajuan_url",
+  "bukti-spp": "bukti_spp_url",
+  "surat-rekomendasi": "surat_rekomendasi_url",
+  "surat-magang": "surat_magang_url",
+};
+
+function ekstensiDari(url = "") {
+  const cocok = String(url).split("?")[0].match(/\.([a-z0-9]+)$/i);
+  return cocok ? cocok[1].toLowerCase() : "";
+}
+
+function ambilBerkas(item) {
+  const dariApi = Array.isArray(item.berkas) ? item.berkas : [];
+
+  return Object.keys(LABEL_BERKAS)
+    .map((jenis) => {
+      const b = dariApi.find((x) => x.jenis === jenis);
+
+      if (b?.preview_url) {
+        return {
+          jenis,
+          label: LABEL_BERKAS[jenis],
+          // jenis file dibaca dari API, karena link bertanda tangan tidak berakhiran .pdf
+          ekstensi: (b.ekstensi || ekstensiDari(b.preview_url)).toLowerCase(),
+          preview_url: b.preview_url,
+          download_url: b.download_url ?? null,
+        };
+      }
+
+      const lama = item[FIELD_LAMA[jenis]];
+
+      if (typeof lama === "string" && /^https?:/i.test(lama)) {
+        return {
+          jenis,
+          label: LABEL_BERKAS[jenis],
+          ekstensi: ekstensiDari(lama),
+          preview_url: lama,
+          download_url: null,
+        };
+      }
+
+      return null;
+    })
+    .filter(Boolean);
+}
+
+// Satu bentuk data untuk daftar maupun detail
+function normalisasiPengajuan(item = {}) {
+  const mhs = item.mahasiswa ?? {};
+  const dep = mhs.departemen ?? item.departemen;
+
+  return {
+    ...item,
+    nama: mhs.nama ?? mhs.name ?? item.nama ?? "-",
+    nim: mhs.nim ?? item.nim ?? "-",
+    departemen:
+      typeof dep === "object" ? dep?.nama ?? dep?.kode ?? "-" : dep ?? "-",
+    status:
+      typeof item.status === "object"
+        ? item.status?.value ?? "menunggu_verifikasi"
+        : item.status ?? "menunggu_verifikasi",
+    no_registrasi: item.nomor_surat ?? item.no_registrasi ?? "-",
+    alamat: item.alamat_instansi ?? item.alamat ?? "-",
+    daftarBerkas: ambilBerkas(item),
+  };
+}
+
+// =====================================================
+// STATUS
+// =====================================================
+
 function teks(value, fallback = "-") {
   if (value == null || value === "") return fallback;
 
@@ -207,145 +317,64 @@ function Field({ label, value, children }) {
 }
 
 // =====================================================
-// PREVIEW BERKAS
+// PREVIEW BERKAS (tampil langsung di dalam modal)
 // =====================================================
 
-function FilePreview({ title, url }) {
-  if (!url) {
-    return (
-      <div className="rounded-xl border border-[#BAC8B1] bg-white p-4 text-sm">
-        <b>{title}</b>
-        <p className="mt-2 text-gray-500">Berkas belum tersedia.</p>
-      </div>
-    );
-  }
-
-  const isPdf = /\.pdf(?:\?.*)?$/i.test(url);
-
+function BerkasKosong({ label }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-[#BAC8B1] bg-white">
-      <div className="flex items-center justify-between gap-3 border-b border-[#BAC8B1] px-4 py-3 text-sm">
-        <strong>{title}</strong>
-
-        <a
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-          className="underline"
-        >
-          Buka berkas
-        </a>
-      </div>
-
-      {isPdf ? (
-        <iframe
-          src={url}
-          title={title}
-          className="h-[480px] w-full"
-        />
-      ) : (
-        <img
-          src={url}
-          alt={title}
-          className="max-h-[520px] w-full bg-white object-contain"
-        />
-      )}
+    <div className="rounded-xl border border-dashed border-[#BAC8B1] bg-white p-4 text-sm">
+      <b>{label}</b>
+      <p className="mt-2 text-gray-500">Berkas belum tersedia.</p>
     </div>
   );
 }
 
-// =====================================================
-// PREVIEW SURAT
-// =====================================================
+function FilePreview({ berkas }) {
+  const gambar = ["jpg", "jpeg", "png", "gif", "webp"].includes(
+    berkas.ekstensi
+  );
 
-function Surat({ data }) {
   return (
-    <div
-      id="surat-print"
-      className="rounded-xl bg-white p-8 text-sm leading-relaxed text-black"
-    >
-      <div className="mb-5 flex justify-between gap-4 border-b-2 border-black pb-3">
-        <div>
-          <small>
-            KEMENTERIAN PENDIDIKAN TINGGI, SAINS, DAN TEKNOLOGI
-          </small>
+    <div className="overflow-hidden rounded-xl border border-[#BAC8B1] bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#BAC8B1] px-4 py-3 text-sm">
+        <strong>{berkas.label}</strong>
 
-          <h2 className="text-2xl font-bold">
-            INSTITUT PERTANIAN BOGOR
-          </h2>
+        <span className="flex gap-4">
+          <a
+            href={berkas.preview_url}
+            target="_blank"
+            rel="noreferrer"
+            className="underline"
+          >
+            Buka berkas
+          </a>
 
-          <span>FAKULTAS KEHUTANAN DAN LINGKUNGAN</span>
-        </div>
-
-        <div className="text-right text-xs">
-          Kampus IPB Dramaga, Bogor 16680
-          <br />
-          Telepon (0251) 8621677
-          <br />
-          fahutan@apps.ipb.ac.id
-        </div>
+          {berkas.download_url && (
+            <a
+              href={berkas.download_url}
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              Download
+            </a>
+          )}
+        </span>
       </div>
 
-      <div className="mb-3 flex justify-between gap-4">
-        <div>
-          Nomor: {data.nomor_surat || data.no_registrasi || "-"}
-          <br />
-          Hal: Pengantar Magang
-        </div>
-
-        <span>Bogor, {formatTanggal(data.tanggal_surat)}</span>
-      </div>
-
-      <p className="mb-3">
-        Yth. Direktur <b>{data.instansi}</b>
-        <br />
-        {data.alamat ?? data.alamat_instansi}
-      </p>
-
-      <p className="mb-3">
-        Dalam rangka meningkatkan keterampilan dan pemahaman mahasiswa
-        Fakultas Kehutanan dan Lingkungan IPB tentang kehutanan dan dunia
-        kerja, disampaikan dengan hormat bahwa mahasiswa Fakultas Kehutanan
-        dan Lingkungan Institut Pertanian Bogor berikut ini:
-      </p>
-
-      <div className="mb-3 ml-3">
-        Nama: {data.nama}
-        <br />
-        NIM: {data.nim}
-        <br />
-        Departemen: {data.departemen}
-      </div>
-
-      <p className="mb-3">
-        Bermaksud untuk melaksanakan magang di {data.instansi} pada tanggal{" "}
-        {formatTanggal(data.tanggal_mulai)} sampai{" "}
-        {formatTanggal(data.tanggal_selesai)}. Sehubungan dengan hal
-        tersebut, kami mohon Saudara berkenan menerima mahasiswa kami untuk
-        melaksanakan magang tersebut.
-      </p>
-
-      <p>Demikian atas perhatian dan kerja samanya, diucapkan terima kasih.</p>
-
-      <div className="ml-auto mt-8 w-72">
-        <div>
-          {data.pejabat?.jabatan ??
-            "Wakil Dekan Bidang Akademik, Kemahasiswaan dan Alumni"}
-        </div>
-
-        {data.ttd_pejabat_url ? (
-          <img
-            src={data.ttd_pejabat_url}
-            alt="Tanda tangan pejabat"
-            className="h-[70px]"
-          />
-        ) : (
-          <div className="h-[70px]" />
-        )}
-
-        <u>{data.pejabat?.nama}</u>
-        <div>NIP {data.pejabat?.nip}</div>
-      </div>
+      {gambar ? (
+        <img
+          src={berkas.preview_url}
+          alt={berkas.label}
+          className="max-h-[520px] w-full bg-white object-contain"
+        />
+      ) : (
+        <iframe
+          src={`${berkas.preview_url}#toolbar=0&navpanes=0&view=FitH`}
+          title={berkas.label}
+          className="h-[640px] w-full"
+        />
+      )}
     </div>
   );
 }
@@ -360,6 +389,7 @@ function DetailModal({ item, onClose, onUpdated }) {
 
   const status = normalisasiStatus(item.status);
   const verified = status === "terverifikasi";
+  const suratMagang = item.daftarBerkas.find((b) => b.jenis === "surat-magang");
 
   async function kirimStatus(body) {
     setBusy(true);
@@ -382,7 +412,7 @@ function DetailModal({ item, onClose, onUpdated }) {
         );
       }
 
-      onUpdated(pengajuan);
+      onUpdated(normalisasiPengajuan(pengajuan));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -391,20 +421,24 @@ function DetailModal({ item, onClose, onUpdated }) {
   }
 
   function verifikasi() {
-    // Pastikan nilai ini sesuai validasi AdminPengajuanController Laravel.
-    kirimStatus({ status: "setuju" });
+    const yakin = window.confirm(
+      "Verifikasi pengajuan ini? Nomor surat dibuat otomatis dan keputusan tidak dapat dibatalkan."
+    );
+
+    if (yakin) kirimStatus({ status: "setuju" });
   }
 
   function tolak() {
-    const alasan = window.prompt("Alasan penolakan atau revisi (opsional):");
+    const alasan = window.prompt("Catatan revisi untuk mahasiswa (wajib diisi):");
 
-    if (alasan !== null) {
-      // Pastikan field catatan sesuai validasi backend.
-      kirimStatus({
-        status: "revisi",
-        catatan: alasan,
-      });
+    if (alasan === null) return;
+
+    if (!alasan.trim()) {
+      setError("Catatan revisi wajib diisi.");
+      return;
     }
+
+    kirimStatus({ status: "revisi", catatan: alasan.trim() });
   }
 
   return (
@@ -412,8 +446,7 @@ function DetailModal({ item, onClose, onUpdated }) {
       <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-[#E6E6E6] shadow-xl">
         <div className="flex items-center justify-between gap-4 border-b border-[#BAC8B1] bg-white px-6 py-4">
           <h3 className="font-bold text-[#404E3B]">
-            Pengajuan{" "}
-            {item.no_registrasi ?? "(nomor belum tersedia)"} — {item.nama}
+            Pengajuan #{item.id} — {item.nama}
           </h3>
 
           <button
@@ -427,71 +460,43 @@ function DetailModal({ item, onClose, onUpdated }) {
         </div>
 
         <div className="space-y-5 overflow-y-auto p-6">
-          {verified ? (
-            <Surat data={item} />
-          ) : (
-            <>
-              <div className="grid gap-3 md:grid-cols-2">
-                <Field
-                  label="Nomor registrasi"
-                  value={item.no_registrasi}
-                />
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field label="Nomor surat" value={item.no_registrasi} />
 
-                <Field label="Status">
-                  <StatusBadge status={item.status} />
-                </Field>
+            <Field label="Status">
+              <StatusBadge status={item.status} />
+            </Field>
 
-                <Field label="Nama" value={item.nama} />
-                <Field label="NIM" value={item.nim} />
-                <Field label="Departemen" value={item.departemen} />
-                <Field label="Instansi" value={item.instansi} />
+            <Field label="Nama" value={item.nama} />
+            <Field label="NIM" value={item.nim} />
+            <Field label="Departemen" value={item.departemen} />
+            <Field label="Instansi" value={item.instansi} />
+            <Field label="Alamat instansi" value={item.alamat} />
 
-                <Field
-                  label="Alamat magang"
-                  value={item.alamat ?? item.alamat_instansi}
-                />
+            <Field
+              label="Pelaksanaan"
+              value={`${formatTanggal(item.tanggal_mulai)} s.d. ${formatTanggal(item.tanggal_selesai)}`}
+            />
+          </div>
 
-                <Field
-                  label="Pelaksanaan"
-                  value={`${formatTanggal(item.tanggal_mulai)} s.d. ${formatTanggal(item.tanggal_selesai)}`}
-                />
-
-                <Field label="Tanda tangan mahasiswa">
-                  {item.tanda_tangan_url ? (
-                    <img
-                      src={item.tanda_tangan_url}
-                      alt="Tanda tangan mahasiswa"
-                      className="max-h-12"
-                    />
-                  ) : (
-                    <span>-</span>
-                  )}
-                </Field>
-
-                <Field label="Barcode">
-                  {item.barcode_url ? (
-                    <img
-                      src={item.barcode_url}
-                      alt="Barcode pengajuan"
-                      className="max-h-12"
-                    />
-                  ) : (
-                    <span>-</span>
-                  )}
-                </Field>
-              </div>
-
-              <FilePreview
-                title="Surat rekomendasi"
-                url={item.surat_rekomendasi_url}
-              />
-
-              <FilePreview
-                title="Bukti pembayaran SPP"
-                url={item.bukti_spp_url}
-              />
-            </>
+          {status === "ditolak" && item.catatan_revisi && (
+            <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800">
+              <b>Catatan revisi:</b>
+              <p className="mt-1 whitespace-pre-line">{item.catatan_revisi}</p>
+            </div>
           )}
+
+          {BERKAS_WAJIB.map((jenis) => {
+            const berkas = item.daftarBerkas.find((b) => b.jenis === jenis);
+
+            return berkas ? (
+              <FilePreview key={jenis} berkas={berkas} />
+            ) : (
+              <BerkasKosong key={jenis} label={LABEL_BERKAS[jenis]} />
+            );
+          })}
+
+          {verified && suratMagang && <FilePreview berkas={suratMagang} />}
 
           {error && (
             <div
@@ -504,30 +509,27 @@ function DetailModal({ item, onClose, onUpdated }) {
         </div>
 
         <div className="flex flex-wrap justify-end gap-2 border-t border-[#BAC8B1] bg-white px-6 py-4">
-          {verified ? (
-            <Button variant="primary" onClick={() => window.print()}>
-              Cetak surat
-            </Button>
-          ) : (
-            status === "menunggu" && (
-              <>
-                <Button
-                  variant="danger"
-                  disabled={busy}
-                  onClick={tolak}
-                >
-                  Tolak / minta revisi
-                </Button>
+          {status === "menunggu" && (
+            <>
+              <Button variant="danger" disabled={busy} onClick={tolak}>
+                Tolak / minta revisi
+              </Button>
 
-                <Button
-                  variant="primary"
-                  disabled={busy}
-                  onClick={verifikasi}
-                >
-                  {busy ? "Memproses..." : "Verifikasi pengajuan"}
-                </Button>
-              </>
-            )
+              <Button variant="primary" disabled={busy} onClick={verifikasi}>
+                {busy ? "Memproses..." : "Verifikasi pengajuan"}
+              </Button>
+            </>
+          )}
+
+          {verified && suratMagang && (
+            <Button
+              variant="primary"
+              onClick={() =>
+                window.open(suratMagang.preview_url, "_blank", "noopener")
+              }
+            >
+              Buka / cetak surat pengantar
+            </Button>
           )}
 
           <Button onClick={onClose}>Tutup</Button>
@@ -541,87 +543,177 @@ function DetailModal({ item, onClose, onUpdated }) {
 // HALAMAN ADMIN
 // =====================================================
 
+const FILTER = [
+  { value: "", label: "Semua" },
+  { value: "menunggu_verifikasi", label: "Menunggu" },
+  { value: "setuju", label: "Disetujui" },
+  { value: "revisi", label: "Perlu revisi" },
+];
+
+const JUMLAH_AWAL = { menunggu_verifikasi: 0, setuju: 0, revisi: 0 };
+
+const META_AWAL = {
+  current_page: 1,
+  last_page: 1,
+  total: 0,
+  from: null,
+  to: null,
+};
+
 export default function AdminPage() {
   const [list, setList] = useState([]);
+  const [meta, setMeta] = useState(META_AWAL);
+  const [jumlah, setJumlah] = useState(JUMLAH_AWAL);
+
+  const [page, setPage] = useState(1);
+  const [filterStatus, setFilterStatus] = useState("");
+  const [cari, setCari] = useState("");
+  const [q, setQ] = useState("");
+  const [versi, setVersi] = useState(0);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [pesanDetail, setPesanDetail] = useState("");
+  const [membukaId, setMembukaId] = useState(null);
   const [selected, setSelected] = useState(null);
 
- async function ambilPengajuan() {
-  setLoading(true);
-  setError("");
-
-  try {
-    const response = await panggilApi(ENDPOINT.daftar);
-
-    console.log("RESPONS API PENGAJUAN:", response);
-
-    const data = toArray(response);
-
-    const normalized = data.map((item) => ({
-      ...item,
-
-      // Data mahasiswa berasal dari object mahasiswa.
-      nama: item.mahasiswa?.nama ?? item.nama ?? "-",
-
-      nim: item.mahasiswa?.nim ?? item.nim ?? "-",
-
-      departemen:
-        typeof item.mahasiswa?.departemen === "object"
-          ? item.mahasiswa.departemen?.nama ??
-            item.mahasiswa.departemen?.kode ??
-            "-"
-          : item.mahasiswa?.departemen ??
-            item.departemen ??
-            "-",
-
-      // Status backend berbentuk { value, label }.
-      status:
-        typeof item.status === "object"
-          ? item.status?.value ?? "menunggu"
-          : item.status ?? "menunggu",
-
-      // Nomor registrasi belum dikirim backend.
-      no_registrasi:
-        item.no_registrasi ??
-        item.nomor_registrasi ??
-        item.no_regis ??
-        "-",
-    }));
-
-    setList(normalized);
-  } catch (err) {
-    setError(err.message);
-  } finally {
-    setLoading(false);
-  }
-}
-
+  // Pencarian berjalan 400 ms setelah berhenti mengetik
   useEffect(() => {
-    ambilPengajuan();
-  }, []);
+    const timer = setTimeout(() => {
+      const baru = cari.trim();
+
+      if (baru !== q) {
+        setPage(1);
+        setQ(baru);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [cari, q]);
+
+  // Daftar pengajuan: dimuat ulang saat halaman, filter, atau pencarian berubah
+  useEffect(() => {
+    let dibatalkan = false;
+
+    async function ambil() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const params = new URLSearchParams({ page, per_page: PER_PAGE });
+
+        if (filterStatus) params.set("status", filterStatus);
+        if (q) params.set("q", q);
+
+        const response = await panggilApi(`${ENDPOINT.daftar}?${params}`);
+
+        if (dibatalkan) return;
+
+        const metaBaru = response.meta ?? META_AWAL;
+
+        // Halaman terakhir bisa berkurang (misalnya data berpindah status)
+        if (metaBaru.last_page >= 1 && page > metaBaru.last_page) {
+          setPage(metaBaru.last_page);
+          return;
+        }
+
+        setList(toArray(response).map(normalisasiPengajuan));
+        setMeta(metaBaru);
+      } catch (err) {
+        if (!dibatalkan) setError(err.message);
+      } finally {
+        if (!dibatalkan) setLoading(false);
+      }
+    }
+
+    ambil();
+
+    return () => {
+      dibatalkan = true;
+    };
+  }, [page, filterStatus, q, versi]);
+
+  // Jumlah per status untuk tombol filter
+  useEffect(() => {
+    let dibatalkan = false;
+
+    async function ambilJumlah() {
+      try {
+        const response = await panggilApi(ENDPOINT.ringkasan);
+
+        if (!dibatalkan) setJumlah({ ...JUMLAH_AWAL, ...unwrap(response) });
+      } catch {
+        // Cadangan jika endpoint ringkasan belum ada di backend
+        try {
+          const hasil = await Promise.all(
+            Object.keys(JUMLAH_AWAL).map(async (status) => {
+              const r = await panggilApi(
+                `${ENDPOINT.daftar}?status=${status}&per_page=1`
+              );
+
+              return [status, r.meta?.total ?? 0];
+            })
+          );
+
+          if (!dibatalkan) setJumlah(Object.fromEntries(hasil));
+        } catch {
+          // jumlah hanya pelengkap, error utama ditampilkan oleh daftar
+        }
+      }
+    }
+
+    ambilJumlah();
+
+    return () => {
+      dibatalkan = true;
+    };
+  }, [versi]);
+
+  async function bukaDetail(id) {
+    setPesanDetail("");
+    setMembukaId(id);
+
+    try {
+      const response = await panggilApi(ENDPOINT.detail(id));
+      const detail = unwrap(response);
+
+      setSelected(normalisasiPengajuan(detail?.pengajuan ?? detail));
+    } catch (err) {
+      setPesanDetail(err.message);
+    } finally {
+      setMembukaId(null);
+    }
+  }
+
+  function handleUpdated(updated) {
+    setSelected((previous) =>
+      previous?.id === updated.id ? { ...previous, ...updated } : previous
+    );
+
+    // muat ulang daftar dan jumlah agar sesuai filter yang sedang aktif
+    setVersi((v) => v + 1);
+  }
+
+  function pilihFilter(value) {
+    setPage(1);
+    setFilterStatus(value);
+  }
+
+  function resetFilter() {
+    setCari("");
+    setQ("");
+    setFilterStatus("");
+    setPage(1);
+  }
 
   function logout() {
     localStorage.removeItem("token");
     window.location.href = "/login";
   }
 
-  function handleUpdated(updated) {
-    setList((previous) =>
-      previous.map((item) =>
-        item.id === updated.id ? { ...item, ...updated } : item
-      )
-    );
-
-    setSelected((previous) =>
-      previous?.id === updated.id
-        ? { ...previous, ...updated }
-        : previous
-    );
-  }
-
-  const count = (status) =>
-    list.filter((item) => normalisasiStatus(item.status) === status).length;
+  const total = jumlah.menunggu_verifikasi + jumlah.setuju + jumlah.revisi;
+  const hitung = (value) => (value === "" ? total : jumlah[value] ?? 0);
+  const adaFilter = Boolean(filterStatus || q || cari);
 
   return (
     <div className="flex min-h-screen flex-col bg-[#E6E6E6] text-[#404E3B]">
@@ -652,30 +744,60 @@ export default function AdminPage() {
         </p>
 
         <div className="rounded-2xl bg-white shadow-lg">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-7 py-5">
+          <div className="space-y-4 px-7 py-5">
             <h2 className="text-xl font-bold">Daftar pengajuan</h2>
 
-            <div className="flex flex-wrap gap-2 text-xs font-semibold">
-              <span className="rounded-full bg-[#BAC8B1] px-3 py-1">
-                {count("menunggu")} menunggu
-              </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="search"
+                value={cari}
+                onChange={(e) => setCari(e.target.value)}
+                placeholder="Cari nama, NIM, atau instansi"
+                className="min-w-[220px] flex-1 rounded-lg border border-[#BAC8B1] px-3 py-2 text-sm outline-none focus:border-[#404E3B]"
+              />
 
-              <span className="rounded-full bg-[#404E3B] px-3 py-1 text-[#E6E6E6]">
-                {count("terverifikasi")} terverifikasi
-              </span>
+              {adaFilter && (
+                <Button onClick={resetFilter}>Reset</Button>
+              )}
+            </div>
 
-              <span className="rounded-full bg-red-100 px-3 py-1 text-red-800">
-                {count("ditolak")} ditolak
-              </span>
+            <div className="flex flex-wrap gap-2">
+              {FILTER.map((f) => {
+                const aktif = filterStatus === f.value;
+
+                return (
+                  <button
+                    key={f.value || "semua"}
+                    type="button"
+                    onClick={() => pilihFilter(f.value)}
+                    className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition ${
+                      aktif
+                        ? "border-[#404E3B] bg-[#404E3B] text-[#E6E6E6]"
+                        : "border-[#BAC8B1] bg-white text-[#404E3B] hover:bg-[#BAC8B1]"
+                    }`}
+                  >
+                    {f.label} ({hitung(f.value)})
+                  </button>
+                );
+              })}
             </div>
           </div>
+
+          {pesanDetail && (
+            <div
+              role="alert"
+              className="mx-7 mb-4 whitespace-pre-line rounded-lg bg-red-100 p-3 text-sm font-semibold text-red-800"
+            >
+              {pesanDetail}
+            </div>
+          )}
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-[#E6E6E6]">
                 <tr>
                   {[
-                    "No. registrasi",
+                    "No. surat",
                     "Nama / NIM",
                     "Departemen",
                     "Instansi tujuan",
@@ -708,7 +830,7 @@ export default function AdminPage() {
                       {error}
 
                       <div className="mt-3">
-                        <Button onClick={ambilPengajuan}>
+                        <Button onClick={() => setVersi((v) => v + 1)}>
                           Coba lagi
                         </Button>
                       </div>
@@ -719,7 +841,9 @@ export default function AdminPage() {
                 {!loading && !error && list.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-4 py-6 text-center">
-                      Belum ada pengajuan.
+                      {adaFilter
+                        ? "Tidak ada pengajuan yang cocok dengan pencarian atau filter."
+                        : "Belum ada pengajuan."}
                     </td>
                   </tr>
                 )}
@@ -739,13 +863,9 @@ export default function AdminPage() {
                         </div>
                       </td>
 
-                      <td className="px-4 py-3">
-                        {item.departemen || "-"}
-                      </td>
+                      <td className="px-4 py-3">{item.departemen || "-"}</td>
 
-                      <td className="px-4 py-3">
-                        {item.instansi || "-"}
-                      </td>
+                      <td className="px-4 py-3">{item.instansi || "-"}</td>
 
                       <td className="px-4 py-3 text-xs">
                         {formatTanggal(item.tanggal_mulai)}
@@ -760,27 +880,67 @@ export default function AdminPage() {
                       <td className="px-4 py-3">
                         <Button
                           className="!px-3 !py-1.5"
-                          onClick={async () => {
-                            setError("");
-
-                            try {
-                              const response = await panggilApi(
-                                ENDPOINT.detail(item.id)
-                              );
-
-                              setSelected(unwrap(response));
-                            } catch (err) {
-                              setError(err.message);
-                            }
-                          }}
+                          disabled={membukaId === item.id}
+                          onClick={() => bukaDetail(item.id)}
                         >
-                          Detail
+                          {membukaId === item.id ? "Memuat..." : "Detail"}
                         </Button>
                       </td>
                     </tr>
                   ))}
               </tbody>
             </table>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 px-7 py-4 text-sm">
+            <span className="opacity-70">
+              {meta.total > 0
+                ? `Menampilkan ${meta.from ?? 0}–${meta.to ?? 0} dari ${meta.total} pengajuan`
+                : "Tidak ada data"}
+            </span>
+
+            {meta.last_page > 1 && (
+              <div className="flex flex-wrap items-center gap-1">
+                <Button
+                  className="!px-3 !py-1.5"
+                  disabled={loading || meta.current_page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  Sebelumnya
+                </Button>
+
+                {daftarHalaman(meta.current_page, meta.last_page).map(
+                  (n, i) =>
+                    n === "..." ? (
+                      <span key={`titik-${i}`} className="px-2">
+                        …
+                      </span>
+                    ) : (
+                      <button
+                        key={n}
+                        type="button"
+                        disabled={loading}
+                        onClick={() => setPage(n)}
+                        className={`h-9 min-w-9 rounded-lg border px-2 text-sm font-bold transition ${
+                          n === meta.current_page
+                            ? "border-[#404E3B] bg-[#404E3B] text-[#E6E6E6]"
+                            : "border-[#BAC8B1] text-[#404E3B] hover:bg-[#BAC8B1]"
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    )
+                )}
+
+                <Button
+                  className="!px-3 !py-1.5"
+                  disabled={loading || meta.current_page >= meta.last_page}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Berikutnya
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </main>
@@ -793,6 +953,7 @@ export default function AdminPage() {
 
       {selected && (
         <DetailModal
+          key={selected.id}
           item={selected}
           onClose={() => setSelected(null)}
           onUpdated={handleUpdated}

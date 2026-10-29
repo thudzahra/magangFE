@@ -14,7 +14,8 @@ const inputTheme = {
   },
 };
 
-const API_URL = import.meta.env.VITE_API_URL || "http://10.6.74.85:8000";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://10.6.66.154:8000";
 
 const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
