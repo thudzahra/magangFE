@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Alert, Button, FileInput, Label, Textarea, TextInput } from "flowbite-react";
 
 
-const API = "http://10.6.74.85:8000/api";
+const API = "http://192.168.137.1:8000/api";
 const ENDPOINT = {
   buat: "/pengajuan-magang",
   ubah: (id) => `/pengajuan-magang/${id}`,
