@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 
 const API = (
   import.meta.env.VITE_API_URL ||
-  "http://10.7.102.23:8000/api"
+  "http://10.6.74.85:8000/api"
 ).replace(/\/+$/, "");
 
 const ENDPOINT = {

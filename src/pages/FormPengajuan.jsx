@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Alert, Button, FileInput, Label, Textarea, TextInput } from "flowbite-react";
 
-const API = "http://10.7.102.23:8000/api";
-
+const API = "http://10.6.74.85:8000/api";
 const ENDPOINT = {
   buat: "/pengajuan-magang",
   ubah: (id) => `/pengajuan-magang/${id}`,
@@ -11,30 +10,23 @@ const ENDPOINT = {
   tandaTangan: (id) => `/pengajuan-magang/${id}/tanda-tangan`,
   kirim: (id) => `/pengajuan-magang/${id}/kirim`,
 };
-
 const DEPARTEMEN_PREFIX = {
   E141: "Manajemen Hutan",
   E241: "Hasil Hutan",
   E341: "Konservasi Sumberdaya Hutan dan Ekowisata",
   E441: "Silvikultur",
 };
-
 const departemenDariNim = (nim) => DEPARTEMEN_PREFIX[(nim || "").toUpperCase().slice(0, 4)] || "";
-
 const STEPS = ["Data diri", "Tempat magang", "Tanda tangan", "Berkas & kirim"];
-
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 const EKSTENSI_BOLEH = ["pdf", "jpg", "jpeg", "png"];
-
 const colors = {
   gray: "border-[#7B9669] bg-[#E6E6E6] text-[#404E3B] placeholder-[#7a8575] focus:border-[#404E3B] focus:ring-[#7B9669]",
   failure: "border-[#b42318] bg-[#E6E6E6] text-[#404E3B] placeholder-[#7a8575] focus:border-[#b42318] focus:ring-[#b42318]",
 };
 const inputTheme = { field: { input: { colors } } };
 const textareaTheme = { colors };
-
 const capitalizeWords = (str) => str.replace(/(^|\s)(\S)/g, (_, space, ch) => space + ch.toUpperCase());
-
 const getUser = () => {
   try {
     return JSON.parse(localStorage.getItem("user")) || {};
@@ -42,22 +34,18 @@ const getUser = () => {
     return {};
   }
 };
-
 const authHeaders = () => ({
   Accept: "application/json",
   Authorization: `Bearer ${localStorage.getItem("token")}`,
 });
-
 const pesanError = (data, fallback) => {
   if (data?.errors) {
     return Object.values(data.errors).flat().join(" ");
   }
   return data?.message || fallback;
 };
-
 const pesanDariError = (err) =>
   err instanceof TypeError ? "Tidak dapat terhubung ke server." : err.message;
-
 const panggilApi = async (path, { json, formData, method = "POST" } = {}) => {
   const response = await fetch(`${API}${path}`, {
     method,
@@ -132,6 +120,7 @@ export default function FormPengajuan() {
   const [menyetujui, setMenyetujui] = useState(false);
   const [versiPreview, setVersiPreview] = useState(0);
   const [preview, setPreview] = useState({ src: "", srcDoc: "", loading: false, error: "" });
+  const [terkirim, setTerkirim] = useState(false);
 
   useEffect(() => {
     if (step !== 2 || !pengajuanId.current) return;
@@ -296,7 +285,8 @@ export default function FormPengajuan() {
     setMsg(null);
     try {
       await panggilApi(ENDPOINT.kirim(pengajuanId.current), { formData: body });
-      navigate("/pengajuan-saya");
+      setTerkirim(true);
+      setMsg({ type: "ok", text: "Pengajuan berhasil dikirim. Menunggu verifikasi admin." });
     } catch (err) {
       setMsg({ type: "no", text: pesanDariError(err) });
     } finally {
@@ -508,7 +498,15 @@ export default function FormPengajuan() {
             )}
 
             {msg && (
-              <Alert className="mt-4 border border-[#b42318] bg-[#ffd9d3] text-[#7a1f12]">{msg.text}</Alert>
+              <div
+                className={`rounded-lg border px-4 py-3 text-sm ${
+                  msg.type === "ok"
+                    ? "border-yellow-500 bg-yellow-100 text-yellow-900"
+                    : "border-red-600 bg-red-100 text-red-800"
+                }`}
+              >
+                {msg.text}
+              </div>
             )}
 
             <div className="mt-6 flex items-center justify-between border-t border-[#BAC8B1] pt-5">
@@ -524,17 +522,20 @@ export default function FormPengajuan() {
               )}
               {step < STEPS.length - 1 ? (
                 <Button
-                  type="button" onClick={next} disabled={loading}
-                  className="border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
+                  type="button"
+                  onClick={next}
+                  disabled={loading || (step === 2 && (!disetujui || menyetujui))}
+                  className="border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#404E3B] disabled:hover:text-[#E6E6E6]"
                 >
                   {loading ? "Menyimpan..." : "Lanjut →"}
                 </Button>
               ) : (
                 <Button
-                  type="button" onClick={handleSubmit} disabled={loading}
-                  className="border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
+                  type="button" onClick={handleSubmit}
+                  disabled={loading || terkirim}
+                  className="border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#404E3B] disabled:hover:text-[#E6E6E6]"
                 >
-                  {loading ? "Mengirim..." : "Kirim pengajuan"}
+                  {loading ? "Mengirim..." : terkirim ? "Sudah terkirim" : "Kirim pengajuan"}
                 </Button>
               )}
             </div>
