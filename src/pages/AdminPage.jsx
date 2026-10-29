@@ -6,11 +6,7 @@ import { useEffect, useState } from "react";
 
 const API = (
   import.meta.env.VITE_API_URL ||
-<<<<<<< HEAD
   "http://10.6.74.85:8000/api"
-=======
-  "http://10.6.66.154:8000/api"
->>>>>>> fe22be5bf0ae463fd7978172739fcc4dba416474
 ).replace(/\/+$/, "");
 
 const ENDPOINT = {
@@ -121,6 +117,36 @@ function daftarHalaman(sekarang, terakhir) {
 }
 
 // =====================================================
+// DEPARTEMEN
+// =====================================================
+
+// Nama lengkap departemen. Kode yang tidak dikenal ditampilkan apa adanya.
+const NAMA_DEPARTEMEN = {
+  MNH: "Manajemen Hutan",
+  THH: "Teknologi Hasil Hutan",
+  KSHE: "Konservasi Sumber Daya Hutan dan Ekowisata",
+  SVK: "Silvikultur",
+};
+
+function namaDepartemen(kode) {
+  if (!kode || kode === "-") return "-";
+  return NAMA_DEPARTEMEN[kode] ?? kode;
+}
+
+// Backend boleh mengirim departemen sebagai teks ("MNH") atau objek ({ kode, nama })
+function bentukDepartemen(dep) {
+  if (dep == null || dep === "") return { kode: "-", nama: "-" };
+
+  if (typeof dep === "object") {
+    const kode = dep.kode ?? dep.nama ?? "-";
+
+    return { kode, nama: dep.nama ?? namaDepartemen(kode) };
+  }
+
+  return { kode: String(dep), nama: namaDepartemen(String(dep)) };
+}
+
+// =====================================================
 // BERKAS
 // =====================================================
 
@@ -185,14 +211,14 @@ function ambilBerkas(item) {
 // Satu bentuk data untuk daftar maupun detail
 function normalisasiPengajuan(item = {}) {
   const mhs = item.mahasiswa ?? {};
-  const dep = mhs.departemen ?? item.departemen;
+  const dep = bentukDepartemen(mhs.departemen ?? item.departemen);
 
   return {
     ...item,
     nama: mhs.nama ?? mhs.name ?? item.nama ?? "-",
     nim: mhs.nim ?? item.nim ?? "-",
-    departemen:
-      typeof dep === "object" ? dep?.nama ?? dep?.kode ?? "-" : dep ?? "-",
+    departemenKode: mhs.departemen_kode ?? dep.kode,
+    departemen: dep.nama,
     status:
       typeof item.status === "object"
         ? item.status?.value ?? "menunggu_verifikasi"
@@ -242,6 +268,35 @@ function normalisasiStatus(status) {
   return aliases[value] ?? value;
 }
 
+// Nomor surat hanya dianggap ada jika pengajuan sudah terverifikasi
+function nomorSuratTampil(item) {
+  const sah = normalisasiStatus(item.status) === "terverifikasi";
+
+  return sah && item.no_registrasi && item.no_registrasi !== "-"
+    ? item.no_registrasi
+    : null;
+}
+
+// Angka di depan nomor surat (contoh "8/IT3.F4/..." -> 8) untuk pengurutan
+function urutanNomor(item) {
+  const angka = parseInt(
+    String(nomorSuratTampil(item) ?? "").split("/")[0],
+    10
+  );
+
+  return Number.isNaN(angka) ? Infinity : angka;
+}
+
+// Nomor surat naik (1, 2, 3, ...); yang belum bernomor di bawah, urut ID
+function urutkanPengajuan(a, b) {
+  const na = urutanNomor(a);
+  const nb = urutanNomor(b);
+
+  if (na !== nb) return na < nb ? -1 : 1;
+
+  return (Number(a.id) || 0) - (Number(b.id) || 0);
+}
+
 const STATUS = {
   menunggu: {
     label: "Menunggu verifikasi",
@@ -252,7 +307,7 @@ const STATUS = {
     className: "bg-[#404E3B] text-[#E6E6E6]",
   },
   ditolak: {
-    label: "Ditolak / perlu revisi",
+    label: "Perlu revisi",
     className: "bg-red-100 text-red-800",
   },
 };
@@ -275,7 +330,7 @@ function StatusBadge({ status }) {
 }
 
 // =====================================================
-// KOMPONEN TOMBOL DAN FIELD
+// KOMPONEN TOMBOL, FIELD, DAN IKON
 // =====================================================
 
 const BUTTON_STYLES = {
@@ -313,6 +368,43 @@ function Field({ label, value, children }) {
         </b>
       )}
     </div>
+  );
+}
+
+function IconCari({ className = "h-5 w-5" }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+
+function IconPanah({ className = "h-5 w-5" }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
   );
 }
 
@@ -389,6 +481,7 @@ function DetailModal({ item, onClose, onUpdated }) {
 
   const status = normalisasiStatus(item.status);
   const verified = status === "terverifikasi";
+  const nomorSurat = nomorSuratTampil(item);
   const suratMagang = item.daftarBerkas.find((b) => b.jenis === "surat-magang");
 
   async function kirimStatus(body) {
@@ -461,7 +554,8 @@ function DetailModal({ item, onClose, onUpdated }) {
 
         <div className="space-y-5 overflow-y-auto p-6">
           <div className="grid gap-3 md:grid-cols-2">
-            <Field label="Nomor surat" value={item.no_registrasi} />
+            {/* Nomor surat hanya muncul untuk pengajuan yang sudah terverifikasi */}
+            {nomorSurat && <Field label="Nomor surat" value={nomorSurat} />}
 
             <Field label="Status">
               <StatusBadge status={item.status} />
@@ -470,8 +564,8 @@ function DetailModal({ item, onClose, onUpdated }) {
             <Field label="Nama" value={item.nama} />
             <Field label="NIM" value={item.nim} />
             <Field label="Departemen" value={item.departemen} />
-            <Field label="Instansi" value={item.instansi} />
-            <Field label="Alamat instansi" value={item.alamat} />
+            <Field label="Perusahaan tujuan" value={item.instansi} />
+            <Field label="Alamat perusahaan" value={item.alamat} />
 
             <Field
               label="Pelaksanaan"
@@ -543,11 +637,22 @@ function DetailModal({ item, onClose, onUpdated }) {
 // HALAMAN ADMIN
 // =====================================================
 
-const FILTER = [
-  { value: "", label: "Semua" },
-  { value: "menunggu_verifikasi", label: "Menunggu" },
+const TAB = [
+  { value: "menunggu_verifikasi", label: "Menunggu verifikasi" },
   { value: "setuju", label: "Disetujui" },
-  { value: "revisi", label: "Perlu revisi" },
+  { value: "revisi", label: "Direvisi" },
+  { value: "", label: "Seluruh data" },
+];
+
+const KOLOM = [
+  "No.",
+  "No. surat",
+  "Nama / NIM",
+  "Departemen",
+  "Perusahaan tujuan",
+  "Pelaksanaan",
+  "Status",
+  "Aksi",
 ];
 
 const JUMLAH_AWAL = { menunggu_verifikasi: 0, setuju: 0, revisi: 0 };
@@ -564,9 +669,11 @@ export default function AdminPage() {
   const [list, setList] = useState([]);
   const [meta, setMeta] = useState(META_AWAL);
   const [jumlah, setJumlah] = useState(JUMLAH_AWAL);
+  const [opsiDep, setOpsiDep] = useState([]);
 
   const [page, setPage] = useState(1);
-  const [filterStatus, setFilterStatus] = useState("");
+  const [filterStatus, setFilterStatus] = useState("menunggu_verifikasi");
+  const [filterDep, setFilterDep] = useState("");
   const [cari, setCari] = useState("");
   const [q, setQ] = useState("");
   const [versi, setVersi] = useState(0);
@@ -591,7 +698,7 @@ export default function AdminPage() {
     return () => clearTimeout(timer);
   }, [cari, q]);
 
-  // Daftar pengajuan: dimuat ulang saat halaman, filter, atau pencarian berubah
+  // Daftar pengajuan: dimuat ulang saat halaman, tab, departemen, atau pencarian berubah
   useEffect(() => {
     let dibatalkan = false;
 
@@ -603,6 +710,7 @@ export default function AdminPage() {
         const params = new URLSearchParams({ page, per_page: PER_PAGE });
 
         if (filterStatus) params.set("status", filterStatus);
+        if (filterDep) params.set("departemen", filterDep);
         if (q) params.set("q", q);
 
         const response = await panggilApi(`${ENDPOINT.daftar}?${params}`);
@@ -617,7 +725,9 @@ export default function AdminPage() {
           return;
         }
 
-        setList(toArray(response).map(normalisasiPengajuan));
+        setList(
+          toArray(response).map(normalisasiPengajuan).sort(urutkanPengajuan)
+        );
         setMeta(metaBaru);
       } catch (err) {
         if (!dibatalkan) setError(err.message);
@@ -631,25 +741,45 @@ export default function AdminPage() {
     return () => {
       dibatalkan = true;
     };
-  }, [page, filterStatus, q, versi]);
+  }, [page, filterStatus, filterDep, q, versi]);
 
-  // Jumlah per status untuk tombol filter
+  // Jumlah per tab (mengikuti pencarian dan departemen) dan daftar departemen
   useEffect(() => {
     let dibatalkan = false;
 
     async function ambilJumlah() {
-      try {
-        const response = await panggilApi(ENDPOINT.ringkasan);
+      const params = new URLSearchParams();
 
-        if (!dibatalkan) setJumlah({ ...JUMLAH_AWAL, ...unwrap(response) });
+      if (filterDep) params.set("departemen", filterDep);
+      if (q) params.set("q", q);
+
+      try {
+        const response = await panggilApi(`${ENDPOINT.ringkasan}?${params}`);
+
+        if (dibatalkan) return;
+
+        const { departemen = [], ...hitungan } = unwrap(response);
+
+        setJumlah({ ...JUMLAH_AWAL, ...hitungan });
+
+        if (Array.isArray(departemen) && departemen.length > 0) {
+          setOpsiDep(
+            departemen
+              .map(bentukDepartemen)
+              .filter((d) => d.kode && d.kode !== "-")
+          );
+        }
       } catch {
         // Cadangan jika endpoint ringkasan belum ada di backend
         try {
           const hasil = await Promise.all(
             Object.keys(JUMLAH_AWAL).map(async (status) => {
-              const r = await panggilApi(
-                `${ENDPOINT.daftar}?status=${status}&per_page=1`
-              );
+              const p = new URLSearchParams(params);
+
+              p.set("status", status);
+              p.set("per_page", 1);
+
+              const r = await panggilApi(`${ENDPOINT.daftar}?${p}`);
 
               return [status, r.meta?.total ?? 0];
             })
@@ -667,7 +797,7 @@ export default function AdminPage() {
     return () => {
       dibatalkan = true;
     };
-  }, [versi]);
+  }, [q, filterDep, versi]);
 
   async function bukaDetail(id) {
     setPesanDetail("");
@@ -690,19 +820,24 @@ export default function AdminPage() {
       previous?.id === updated.id ? { ...previous, ...updated } : previous
     );
 
-    // muat ulang daftar dan jumlah agar sesuai filter yang sedang aktif
+    // muat ulang daftar dan jumlah agar sesuai tab yang sedang aktif
     setVersi((v) => v + 1);
   }
 
-  function pilihFilter(value) {
+  function pilihTab(value) {
     setPage(1);
     setFilterStatus(value);
   }
 
-  function resetFilter() {
+  function pilihDepartemen(value) {
+    setPage(1);
+    setFilterDep(value);
+  }
+
+  function resetPencarian() {
     setCari("");
     setQ("");
-    setFilterStatus("");
+    setFilterDep("");
     setPage(1);
   }
 
@@ -713,80 +848,163 @@ export default function AdminPage() {
 
   const total = jumlah.menunggu_verifikasi + jumlah.setuju + jumlah.revisi;
   const hitung = (value) => (value === "" ? total : jumlah[value] ?? 0);
-  const adaFilter = Boolean(filterStatus || q || cari);
+  const adaPencarian = Boolean(q || cari || filterDep);
+
+  // Nomor urut berlanjut antar halaman (halaman 2 mulai dari 21, dst.)
+  const nomorAwal = meta.from ?? (meta.current_page - 1) * PER_PAGE + 1;
+
+  // Pilihan departemen: dari backend, atau dari data yang sedang dimuat sebagai cadangan
+  const sumberDep =
+    opsiDep.length > 0
+      ? opsiDep
+      : list.map((item) => ({
+          kode: item.departemenKode,
+          nama: item.departemen,
+        }));
+
+  const pilihanDep = [
+    ...new Map(
+      [
+        ...sumberDep,
+        filterDep ? { kode: filterDep, nama: namaDepartemen(filterDep) } : null,
+      ]
+        .filter((d) => d && d.kode && d.kode !== "-")
+        .map((d) => [d.kode, d])
+    ).values(),
+  ].sort((a, b) => a.nama.localeCompare(b.nama, "id"));
 
   return (
     <div className="flex min-h-screen flex-col bg-[#E6E6E6] text-[#404E3B]">
       <header className="border-b border-gray-300 bg-white">
-        <div className="flex items-center justify-between gap-4 px-6 py-3 lg:px-40">
-          <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#404E3B] text-sm font-bold text-[#E6E6E6]">
+        <div className="mx-auto flex w-full max-w-[1680px] items-center justify-between gap-4 px-6 py-4 2xl:px-0">
+          <div className="flex items-center gap-3">
+            <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#404E3B] text-base font-bold text-[#E6E6E6]">
               SM
             </span>
 
-            <span className="text-lg font-bold">SIMAGANG</span>
+            <span className="text-2xl font-bold">SIMAGANG</span>
+
+            <span className="rounded-full bg-[#DDEBD5] px-4 py-1 text-sm font-semibold">
+              Admin
+            </span>
           </div>
 
-          <Button variant="primary" onClick={logout}>
+          <Button variant="primary" className="!px-5 !py-3" onClick={logout}>
             Log Out
           </Button>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-12">
-        <h1 className="text-center text-3xl font-bold">
+      <main className="mx-auto w-full max-w-[1680px] flex-1 px-6 py-14 2xl:px-0">
+        <h1 className="text-center text-4xl font-bold">
           Dashboard verifikasi admin
         </h1>
 
-        <p className="mb-8 mt-2 text-center opacity-75">
-          Periksa data dan berkas mahasiswa, lalu verifikasi pengajuan
+        <p className="mb-10 mt-3 text-center text-lg">
+          Periksa data dan berkas mahasiswa, lalu terbitkan surat pengantar
           magang.
         </p>
 
-        <div className="rounded-2xl bg-white shadow-lg">
-          <div className="space-y-4 px-7 py-5">
-            <h2 className="text-xl font-bold">Daftar pengajuan</h2>
+        <section className="overflow-hidden rounded-3xl bg-white shadow-xl">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E6E6E6] px-9 py-7">
+            <h2 className="text-2xl font-bold">Daftar pengajuan</h2>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap gap-3 text-base font-medium">
+              <span className="rounded-full bg-[#FDEFC3] px-5 py-1.5 text-[#8A5A00]">
+                {jumlah.menunggu_verifikasi} menunggu
+              </span>
+
+              <span className="rounded-full bg-[#D9F2D9] px-5 py-1.5 text-[#1F6B2E]">
+                {jumlah.setuju} terverifikasi
+              </span>
+
+              <span className="rounded-full bg-[#FDE2E2] px-5 py-1.5 text-[#B42318]">
+                {jumlah.revisi} revisi
+              </span>
+            </div>
+          </div>
+
+          <div
+            role="tablist"
+            className="flex gap-8 overflow-x-auto border-b border-[#E6E6E6] px-9"
+          >
+            {TAB.map((tab) => {
+              const aktif = filterStatus === tab.value;
+
+              return (
+                <button
+                  key={tab.value || "semua"}
+                  type="button"
+                  role="tab"
+                  aria-selected={aktif}
+                  onClick={() => pilihTab(tab.value)}
+                  className={`-mb-px flex items-center gap-3 whitespace-nowrap border-b-[3px] px-1 py-5 text-lg transition ${
+                    aktif
+                      ? "border-[#404E3B] font-semibold"
+                      : "border-transparent opacity-75 hover:opacity-100"
+                  }`}
+                >
+                  {tab.label}
+
+                  <span
+                    className={`rounded-full px-3 py-0.5 text-sm font-bold ${
+                      aktif
+                        ? "bg-[#404E3B] text-[#E6E6E6]"
+                        : "bg-[#E6E6E6]"
+                    }`}
+                  >
+                    {hitung(tab.value)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4 px-9 py-6">
+            <label className="relative min-w-[260px] flex-1">
+              <span className="sr-only">Cari pengajuan</span>
+
+              <IconCari className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 opacity-70" />
+
               <input
                 type="search"
                 value={cari}
                 onChange={(e) => setCari(e.target.value)}
-                placeholder="Cari nama, NIM, atau instansi"
-                className="min-w-[220px] flex-1 rounded-lg border border-[#BAC8B1] px-3 py-2 text-sm outline-none focus:border-[#404E3B]"
+                placeholder="Cari nama, NIM, perusahaan, no. surat..."
+                className="w-full rounded-xl border border-[#404E3B] bg-white py-3.5 pl-14 pr-4 text-base outline-none focus:ring-2 focus:ring-[#BAC8B1]"
               />
+            </label>
 
-              {adaFilter && (
-                <Button onClick={resetFilter}>Reset</Button>
-              )}
+            <div className="relative min-w-[280px]">
+              <select
+                value={filterDep}
+                onChange={(e) => pilihDepartemen(e.target.value)}
+                aria-label="Filter departemen"
+                className="w-full cursor-pointer appearance-none rounded-xl border border-[#404E3B] bg-white py-3.5 pl-5 pr-12 text-base outline-none focus:ring-2 focus:ring-[#BAC8B1]"
+              >
+                <option value="">Semua departemen</option>
+
+                {pilihanDep.map((dep) => (
+                  <option key={dep.kode} value={dep.kode}>
+                    {dep.nama}
+                  </option>
+                ))}
+              </select>
+
+              <IconPanah className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2" />
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              {FILTER.map((f) => {
-                const aktif = filterStatus === f.value;
-
-                return (
-                  <button
-                    key={f.value || "semua"}
-                    type="button"
-                    onClick={() => pilihFilter(f.value)}
-                    className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition ${
-                      aktif
-                        ? "border-[#404E3B] bg-[#404E3B] text-[#E6E6E6]"
-                        : "border-[#BAC8B1] bg-white text-[#404E3B] hover:bg-[#BAC8B1]"
-                    }`}
-                  >
-                    {f.label} ({hitung(f.value)})
-                  </button>
-                );
-              })}
-            </div>
+            {adaPencarian && (
+              <Button className="!py-3.5" onClick={resetPencarian}>
+                Reset
+              </Button>
+            )}
           </div>
 
           {pesanDetail && (
             <div
               role="alert"
-              className="mx-7 mb-4 whitespace-pre-line rounded-lg bg-red-100 p-3 text-sm font-semibold text-red-800"
+              className="mx-9 mb-4 whitespace-pre-line rounded-lg bg-red-100 p-3 text-sm font-semibold text-red-800"
             >
               {pesanDetail}
             </div>
@@ -796,16 +1014,13 @@ export default function AdminPage() {
             <table className="w-full text-left text-sm">
               <thead className="bg-[#E6E6E6]">
                 <tr>
-                  {[
-                    "No. surat",
-                    "Nama / NIM",
-                    "Departemen",
-                    "Instansi tujuan",
-                    "Pelaksanaan",
-                    "Status",
-                    "Aksi",
-                  ].map((heading) => (
-                    <th key={heading} className="px-4 py-3 font-semibold">
+                  {KOLOM.map((heading) => (
+                    <th
+                      key={heading}
+                      className={`px-6 py-4 text-sm font-semibold uppercase tracking-wide first:pl-9 last:pr-9 ${
+                        heading === "No." ? "text-center" : ""
+                      }`}
+                    >
                       {heading}
                     </th>
                   ))}
@@ -815,7 +1030,10 @@ export default function AdminPage() {
               <tbody className="divide-y divide-[#E6E6E6]">
                 {loading && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-6 text-center">
+                    <td
+                      colSpan={KOLOM.length}
+                      className="px-6 py-14 text-center text-base"
+                    >
                       Memuat data pengajuan...
                     </td>
                   </tr>
@@ -824,8 +1042,8 @@ export default function AdminPage() {
                 {!loading && error && (
                   <tr>
                     <td
-                      colSpan={7}
-                      className="whitespace-pre-line px-4 py-6 text-center text-red-700"
+                      colSpan={KOLOM.length}
+                      className="whitespace-pre-line px-6 py-14 text-center text-base text-red-700"
                     >
                       {error}
 
@@ -840,59 +1058,70 @@ export default function AdminPage() {
 
                 {!loading && !error && list.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-6 text-center">
-                      {adaFilter
-                        ? "Tidak ada pengajuan yang cocok dengan pencarian atau filter."
-                        : "Belum ada pengajuan."}
+                    <td
+                      colSpan={KOLOM.length}
+                      className="px-6 py-14 text-center text-base"
+                    >
+                      Tidak ada pengajuan yang cocok.
                     </td>
                   </tr>
                 )}
 
                 {!loading &&
                   !error &&
-                  list.map((item) => (
-                    <tr key={item.id}>
-                      <td className="px-4 py-3 font-bold">
-                        {item.no_registrasi || "-"}
-                      </td>
+                  list.map((item, index) => {
+                    const nomorSurat = nomorSuratTampil(item);
 
-                      <td className="px-4 py-3">
-                        <b>{item.nama || "-"}</b>
-                        <div className="text-xs opacity-70">
-                          {item.nim || "-"}
-                        </div>
-                      </td>
+                    return (
+                      <tr key={item.id}>
+                        <td className="w-20 px-6 py-4 pl-9 text-center tabular-nums">
+                          {nomorAwal + index}
+                        </td>
 
-                      <td className="px-4 py-3">{item.departemen || "-"}</td>
+                        <td className="whitespace-nowrap px-6 py-4 font-bold tabular-nums">
+                          {nomorSurat ?? (
+                            <span className="font-normal opacity-40">—</span>
+                          )}
+                        </td>
 
-                      <td className="px-4 py-3">{item.instansi || "-"}</td>
+                        <td className="px-6 py-4">
+                          <b>{item.nama || "-"}</b>
+                          <div className="text-xs opacity-70">
+                            {item.nim || "-"}
+                          </div>
+                        </td>
 
-                      <td className="px-4 py-3 text-xs">
-                        {formatTanggal(item.tanggal_mulai)}
-                        <br />
-                        s.d. {formatTanggal(item.tanggal_selesai)}
-                      </td>
+                        <td className="px-6 py-4">{item.departemen || "-"}</td>
 
-                      <td className="px-4 py-3">
-                        <StatusBadge status={item.status} />
-                      </td>
+                        <td className="px-6 py-4">{item.instansi || "-"}</td>
 
-                      <td className="px-4 py-3">
-                        <Button
-                          className="!px-3 !py-1.5"
-                          disabled={membukaId === item.id}
-                          onClick={() => bukaDetail(item.id)}
-                        >
-                          {membukaId === item.id ? "Memuat..." : "Detail"}
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="px-6 py-4 text-xs">
+                          {formatTanggal(item.tanggal_mulai)}
+                          <br />
+                          s.d. {formatTanggal(item.tanggal_selesai)}
+                        </td>
+
+                        <td className="px-6 py-4">
+                          <StatusBadge status={item.status} />
+                        </td>
+
+                        <td className="px-6 py-4 pr-9">
+                          <Button
+                            className="!px-4 !py-2"
+                            disabled={membukaId === item.id}
+                            onClick={() => bukaDetail(item.id)}
+                          >
+                            {membukaId === item.id ? "Memuat..." : "Detail"}
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 px-7 py-4 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#E6E6E6] px-9 py-5 text-sm">
             <span className="opacity-70">
               {meta.total > 0
                 ? `Menampilkan ${meta.from ?? 0}–${meta.to ?? 0} dari ${meta.total} pengajuan`
@@ -942,13 +1171,15 @@ export default function AdminPage() {
               </div>
             )}
           </div>
-        </div>
+        </section>
       </main>
 
-      <footer className="bg-[#404E3B] px-6 py-8 text-sm leading-7 text-[#E6E6E6] lg:px-40">
-        <b>SIMAGANG</b> — Sistem Informasi Magang Kampus
-        <br />
-        Fakultas Kehutanan dan Lingkungan IPB
+      <footer className="bg-[#404E3B] px-6 py-8 text-sm leading-7 text-[#E6E6E6]">
+        <div className="mx-auto w-full max-w-[1680px] 2xl:px-0">
+          <b>SIMAGANG</b> — Sistem Informasi Magang Kampus
+          <br />
+          Fakultas Kehutanan dan Lingkungan IPB
+        </div>
       </footer>
 
       {selected && (
