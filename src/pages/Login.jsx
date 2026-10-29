@@ -5,7 +5,7 @@ import { Alert, Button, Card, Label, TextInput } from "flowbite-react";
 // Halaman tujuan setelah login, sesuai role dari API
 const ROLE_HOME = {
   mahasiswa: "/form-pengajuan",
-  admin: "/dashboard-admin",
+  admin_kpap: "/dashboard-admin",
 };
 
 // Warna: #E6E6E6 background | putih card | #404E3B teks & tombol | #7B9669 border | #BAC8B1 hover
