@@ -1,9 +1,4 @@
 import { useEffect, useState } from "react";
-
-// =====================================================
-// KONFIGURASI API
-// =====================================================
-
 const API = (
   import.meta.env.VITE_API_URL ||
   "http://10.6.74.152:8000/api"
@@ -68,10 +63,6 @@ async function panggilApi(endpoint, { method = "GET", body } = {}) {
   return data;
 }
 
-// =====================================================
-// UTILITAS DATA
-// =====================================================
-
 const unwrap = (response) => response?.data ?? response;
 
 function toArray(response) {
@@ -116,11 +107,6 @@ function daftarHalaman(sekarang, terakhir) {
   return hasil;
 }
 
-// =====================================================
-// DEPARTEMEN
-// =====================================================
-
-// Nama lengkap departemen. Kode yang tidak dikenal ditampilkan apa adanya.
 const NAMA_DEPARTEMEN = {
   MNH: "Manajemen Hutan",
   THH: "Teknologi Hasil Hutan",
@@ -146,9 +132,6 @@ function bentukDepartemen(dep) {
   return { kode: String(dep), nama: namaDepartemen(String(dep)) };
 }
 
-// =====================================================
-// BERKAS
-// =====================================================
 
 const LABEL_BERKAS = {
   "surat-pengajuan": "Surat pengajuan magang",
