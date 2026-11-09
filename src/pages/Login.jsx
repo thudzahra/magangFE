@@ -1,20 +1,19 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Alert, Button, Card, Label, TextInput } from "flowbite-react";
+import { Alert, Button, Card, Label } from "flowbite-react";
 
-// Halaman tujuan setelah login, sesuai role dari API
 const ROLE_HOME = {
   mahasiswa: "/form-pengajuan",
   admin_kpap: "/dashboard-admin",
 };
 
-// Warna: #E6E6E6 background | putih card | #404E3B teks & tombol | #7B9669 border | #BAC8B1 hover
+// Theme khusus untuk input biasa (Email)
 const inputTheme = {
   field: {
     input: {
       colors: {
-        gray: "border-[#7B9669] bg-[#E6E6E6] text-[#404E3B] placeholder-[#7a8575] focus:border-[#404E3B] focus:ring-[#7B9669]",
-        failure: "border-[#b42318] bg-[#E6E6E6] text-[#404E3B] placeholder-[#7a8575] focus:border-[#b42318] focus:ring-[#b42318]",
+        gray: "border-[#7B9669] bg-white text-[#404E3B] placeholder-[#7a8575] focus:border-[#404E3B] focus:ring-[#7B9669]",
+        failure: "border-[#b42318] bg-white text-[#404E3B] placeholder-[#7a8575] focus:border-[#b42318] focus:ring-[#b42318]",
       },
     },
   },
@@ -22,7 +21,6 @@ const inputTheme = {
 
 const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
-// Ikon mata untuk lihat / sembunyikan password
 function EyeIcon({ off }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -74,7 +72,6 @@ export default function Login() {
         return;
       }
 
-      // simpan token & data user, lalu pindah ke dashboard sesuai role
       localStorage.setItem("token", data.token || data.access_token);
       localStorage.setItem("user", JSON.stringify(data.user));
       navigate(ROLE_HOME[data.user?.role] || "/form-pengajuan", { replace: true });
@@ -98,35 +95,44 @@ export default function Login() {
           </div>
 
           <Label htmlFor="email" className="mb-1 text-[#404E3B]">Email</Label>
-          <TextInput
+          <input
             id="email"
-            theme={inputTheme}
             type="email"
             autoComplete="email"
             value={form.email}
             onChange={update("email")}
             placeholder="nama@email.com"
-            color={errors.email ? "failure" : "white"}
+            className={`w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition-colors ${
+              errors.email
+                ? "border-[#b42318] bg-white focus:border-[#b42318] focus:ring-1 focus:ring-[#b42318]"
+                : "border-[#7B9669] bg-white focus:border-[#404E3B] focus:ring-1 focus:ring-[#404E3B]"
+            }`}
           />
           <p className="mb-2 min-h-5 text-xs font-medium text-[#b42318]">{errors.email}</p>
 
           <Label htmlFor="password" className="mb-1 text-[#404E3B]">Password</Label>
-          <div className="relative">
-            <TextInput
+          {/* CONTAINER PASSWORD */}
+          <div
+            className={`flex w-full items-stretch overflow-hidden rounded-lg border bg-white transition-colors focus-within:ring-1 ${
+              errors.password
+                ? "border-[#b42318] focus-within:border-[#b42318] focus-within:ring-[#b42318]"
+                : "border-[#7B9669] focus-within:border-[#404E3B] focus-within:ring-[#404E3B]"
+            }`}
+          >
+            <input
               id="password"
-              theme={inputTheme}
               type={showPw ? "text" : "password"}
               value={form.password}
               onChange={update("password")}
               placeholder="Password"
               autoComplete="current-password"
-              color={errors.password ? "failure" : "white"}
+              className="w-full bg-transparent px-3 py-2.5 text-sm outline-none placeholder-[#7a8575]"
             />
             <button
               type="button"
               onClick={() => setShowPw((s) => !s)}
               aria-label={showPw ? "Sembunyikan password" : "Lihat password"}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#404E3B] hover:text-[#7B9669]"
+              className="flex shrink-0 items-center justify-center px-3 text-[#404E3B] hover:text-[#7B9669]"
             >
               <EyeIcon off={showPw} />
             </button>

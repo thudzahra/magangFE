@@ -84,7 +84,6 @@ function toArray(response) {
 function formatTanggal(value) {
   if (!value) return "-";
 
-  // "2026-11-02" dibaca sebagai tanggal lokal agar tidak bergeser hari
   const date = /^\d{4}-\d{2}-\d{2}$/.test(value)
     ? new Date(`${value}T00:00:00`)
     : new Date(value);
@@ -98,7 +97,6 @@ function formatTanggal(value) {
   }).format(date);
 }
 
-// Nomor halaman yang ditampilkan, contoh: [1, "...", 4, 5, 6, "...", 12]
 function daftarHalaman(sekarang, terakhir) {
   const angka = [
     ...new Set([1, terakhir, sekarang - 1, sekarang, sekarang + 1]),
@@ -120,7 +118,6 @@ function daftarHalaman(sekarang, terakhir) {
 // DEPARTEMEN
 // =====================================================
 
-// Nama lengkap departemen. Kode yang tidak dikenal ditampilkan apa adanya.
 const NAMA_DEPARTEMEN = {
   MNH: "Manajemen Hutan",
   THH: "Teknologi Hasil Hutan",
@@ -133,7 +130,6 @@ function namaDepartemen(kode) {
   return NAMA_DEPARTEMEN[kode] ?? kode;
 }
 
-// Backend boleh mengirim departemen sebagai teks ("MNH") atau objek ({ kode, nama })
 function bentukDepartemen(dep) {
   if (dep == null || dep === "") return { kode: "-", nama: "-" };
 
@@ -157,10 +153,8 @@ const LABEL_BERKAS = {
   "surat-magang": "Surat pengantar magang",
 };
 
-// Berkas yang selalu ditampilkan (diberi keterangan jika belum ada)
 const BERKAS_WAJIB = ["surat-pengajuan", "bukti-spp", "surat-rekomendasi"];
 
-// Cadangan jika backend mengirim link langsung (bukan array "berkas")
 const FIELD_LAMA = {
   "surat-pengajuan": "surat_pengajuan_url",
   "bukti-spp": "bukti_spp_url",
@@ -184,7 +178,6 @@ function ambilBerkas(item) {
         return {
           jenis,
           label: LABEL_BERKAS[jenis],
-          // jenis file dibaca dari API, karena link bertanda tangan tidak berakhiran .pdf
           ekstensi: (b.ekstensi || ekstensiDari(b.preview_url)).toLowerCase(),
           preview_url: b.preview_url,
           download_url: b.download_url ?? null,
@@ -208,7 +201,6 @@ function ambilBerkas(item) {
     .filter(Boolean);
 }
 
-// Satu bentuk data untuk daftar maupun detail
 function normalisasiPengajuan(item = {}) {
   const mhs = item.mahasiswa ?? {};
   const dep = bentukDepartemen(mhs.departemen ?? item.departemen);
@@ -268,7 +260,6 @@ function normalisasiStatus(status) {
   return aliases[value] ?? value;
 }
 
-// Nomor surat hanya dianggap ada jika pengajuan sudah terverifikasi
 function nomorSuratTampil(item) {
   const sah = normalisasiStatus(item.status) === "terverifikasi";
 
@@ -277,7 +268,6 @@ function nomorSuratTampil(item) {
     : null;
 }
 
-// Angka di depan nomor surat (contoh "8/IT3.F4/..." -> 8) untuk pengurutan
 function urutanNomor(item) {
   const angka = parseInt(
     String(nomorSuratTampil(item) ?? "").split("/")[0],
@@ -287,7 +277,6 @@ function urutanNomor(item) {
   return Number.isNaN(angka) ? Infinity : angka;
 }
 
-// Nomor surat naik (1, 2, 3, ...); yang belum bernomor di bawah, urut ID
 function urutkanPengajuan(a, b) {
   const na = urutanNomor(a);
   const nb = urutanNomor(b);
@@ -322,7 +311,7 @@ function StatusBadge({ status }) {
 
   return (
     <span
-      className={`inline-block w-fit rounded-full px-3 py-1 text-xs font-semibold ${config.className}`}
+      className={`inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-semibold ${config.className}`}
     >
       {config.label}
     </span>
@@ -335,11 +324,11 @@ function StatusBadge({ status }) {
 
 const BUTTON_STYLES = {
   primary:
-    "rounded-lg bg-[#404E3B] px-4 py-2 text-sm font-bold text-[#E6E6E6] transition hover:bg-[#BAC8B1] hover:text-[#404E3B] disabled:cursor-not-allowed disabled:opacity-50",
+    "rounded-lg bg-[#404E3B] px-4 py-2 text-sm font-bold text-[#E6E6E6] transition hover:bg-[#BAC8B1] hover:text-[#404E3B] disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B9669]",
   light:
-    "rounded-lg border border-[#404E3B] px-4 py-2 text-sm font-bold text-[#404E3B] transition hover:bg-[#404E3B] hover:text-[#E6E6E6] disabled:cursor-not-allowed disabled:opacity-50",
+    "rounded-lg border border-[#404E3B] px-4 py-2 text-sm font-bold text-[#404E3B] transition hover:bg-[#404E3B] hover:text-[#E6E6E6] disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B9669]",
   danger:
-    "rounded-lg border border-red-800 px-4 py-2 text-sm font-bold text-red-800 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50",
+    "rounded-lg border border-red-800 px-4 py-2 text-sm font-bold text-red-800 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400",
 };
 
 function Button({
@@ -409,7 +398,7 @@ function IconPanah({ className = "h-5 w-5" }) {
 }
 
 // =====================================================
-// PREVIEW BERKAS (tampil langsung di dalam modal)
+// PREVIEW BERKAS
 // =====================================================
 
 function BerkasKosong({ label }) {
@@ -431,12 +420,12 @@ function FilePreview({ berkas }) {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#BAC8B1] px-4 py-3 text-sm">
         <strong>{berkas.label}</strong>
 
-        <span className="flex gap-4">
+        <span className="flex flex-wrap items-center gap-4 text-xs font-medium">
           <a
             href={berkas.preview_url}
             target="_blank"
             rel="noreferrer"
-            className="underline"
+            className="underline-offset-2 hover:underline"
           >
             Buka berkas
           </a>
@@ -446,7 +435,7 @@ function FilePreview({ berkas }) {
               href={berkas.download_url}
               target="_blank"
               rel="noreferrer"
-              className="underline"
+              className="underline-offset-2 hover:underline"
             >
               Download
             </a>
@@ -495,8 +484,6 @@ function DetailModal({ item, onClose, onUpdated }) {
       });
 
       const updated = unwrap(response);
-
-      // Mendukung respons yang membungkus objek pengajuan.
       const pengajuan = updated?.pengajuan ?? updated;
 
       if (!pengajuan || pengajuan.id == null) {
@@ -536,9 +523,9 @@ function DetailModal({ item, onClose, onUpdated }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-[#E6E6E6] shadow-xl">
+      <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-[#E6E6E6] shadow-2xl">
         <div className="flex items-center justify-between gap-4 border-b border-[#BAC8B1] bg-white px-6 py-4">
-          <h3 className="font-bold text-[#404E3B]">
+          <h3 className="truncate font-bold text-[#404E3B]">
             Pengajuan #{item.id} — {item.nama}
           </h3>
 
@@ -546,7 +533,7 @@ function DetailModal({ item, onClose, onUpdated }) {
             type="button"
             onClick={onClose}
             aria-label="Tutup detail"
-            className="text-xl text-[#404E3B]"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xl text-[#404E3B] transition hover:bg-[#E6E6E6] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B9669]"
           >
             ×
           </button>
@@ -554,7 +541,6 @@ function DetailModal({ item, onClose, onUpdated }) {
 
         <div className="space-y-5 overflow-y-auto p-6">
           <div className="grid gap-3 md:grid-cols-2">
-            {/* Nomor surat hanya muncul untuk pengajuan yang sudah terverifikasi */}
             {nomorSurat && <Field label="Nomor surat" value={nomorSurat} />}
 
             <Field label="Status">
@@ -684,7 +670,6 @@ export default function AdminPage() {
   const [membukaId, setMembukaId] = useState(null);
   const [selected, setSelected] = useState(null);
 
-  // Pencarian berjalan 400 ms setelah berhenti mengetik
   useEffect(() => {
     const timer = setTimeout(() => {
       const baru = cari.trim();
@@ -698,7 +683,6 @@ export default function AdminPage() {
     return () => clearTimeout(timer);
   }, [cari, q]);
 
-  // Daftar pengajuan: dimuat ulang saat halaman, tab, departemen, atau pencarian berubah
   useEffect(() => {
     let dibatalkan = false;
 
@@ -719,7 +703,6 @@ export default function AdminPage() {
 
         const metaBaru = response.meta ?? META_AWAL;
 
-        // Halaman terakhir bisa berkurang (misalnya data berpindah status)
         if (metaBaru.last_page >= 1 && page > metaBaru.last_page) {
           setPage(metaBaru.last_page);
           return;
@@ -743,7 +726,6 @@ export default function AdminPage() {
     };
   }, [page, filterStatus, filterDep, q, versi]);
 
-  // Jumlah per tab (mengikuti pencarian dan departemen) dan daftar departemen
   useEffect(() => {
     let dibatalkan = false;
 
@@ -770,7 +752,6 @@ export default function AdminPage() {
           );
         }
       } catch {
-        // Cadangan jika endpoint ringkasan belum ada di backend
         try {
           const hasil = await Promise.all(
             Object.keys(JUMLAH_AWAL).map(async (status) => {
@@ -820,7 +801,6 @@ export default function AdminPage() {
       previous?.id === updated.id ? { ...previous, ...updated } : previous
     );
 
-    // muat ulang daftar dan jumlah agar sesuai tab yang sedang aktif
     setVersi((v) => v + 1);
   }
 
@@ -850,10 +830,8 @@ export default function AdminPage() {
   const hitung = (value) => (value === "" ? total : jumlah[value] ?? 0);
   const adaPencarian = Boolean(q || cari || filterDep);
 
-  // Nomor urut berlanjut antar halaman (halaman 2 mulai dari 21, dst.)
   const nomorAwal = meta.from ?? (meta.current_page - 1) * PER_PAGE + 1;
 
-  // Pilihan departemen: dari backend, atau dari data yang sedang dimuat sebagai cadangan
   const sumberDep =
     opsiDep.length > 0
       ? opsiDep
@@ -874,59 +852,63 @@ export default function AdminPage() {
   ].sort((a, b) => a.nama.localeCompare(b.nama, "id"));
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#E6E6E6] text-[#404E3B]">
-      <header className="border-b border-gray-300 bg-white">
-        <div className="mx-auto flex w-full max-w-[1680px] items-center justify-between gap-4 px-6 py-4 2xl:px-0">
+    <div className="flex min-h-screen flex-col bg-[#E6E6E6] text-[#404E3B] antialiased">
+      {/* HEADER */}
+      <header className="sticky top-0 z-20 border-b border-gray-300 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-[1680px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
-            <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#404E3B] text-base font-bold text-[#E6E6E6]">
+            <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#404E3B] text-sm font-bold text-[#E6E6E6]">
               SM
             </span>
 
-            <span className="text-2xl font-bold">SIMAGANG</span>
+            <span className="text-xl font-bold tracking-tight">SIMAGANG</span>
 
-            <span className="rounded-full bg-[#DDEBD5] px-4 py-1 text-sm font-semibold">
+            <span className="rounded-full bg-[#DDEBD5] px-3 py-1 text-xs font-semibold sm:text-sm">
               Admin
             </span>
           </div>
 
-          <Button variant="primary" className="!px-5 !py-3" onClick={logout}>
+          <Button variant="primary" className="!px-5 !py-2.5" onClick={logout}>
             Log Out
           </Button>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-[1680px] flex-1 px-6 py-14 2xl:px-0">
-        <h1 className="text-center text-4xl font-bold">
-          Dashboard verifikasi admin
-        </h1>
+      <main className="mx-auto w-full max-w-[1680px] flex-1 px-4 py-10 sm:px-6 lg:px-8">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold sm:text-3xl">
+            Dashboard verifikasi admin
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm text-[#5b6b55] sm:text-base">
+            Periksa data dan berkas mahasiswa, lalu terbitkan surat pengantar
+            magang.
+          </p>
+        </div>
 
-        <p className="mb-10 mt-3 text-center text-lg">
-          Periksa data dan berkas mahasiswa, lalu terbitkan surat pengantar
-          magang.
-        </p>
+        <section className="overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-black/5">
+          {/* Ringkasan + judul */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E6E6E6] px-5 py-5 sm:px-8">
+            <h2 className="text-xl font-bold sm:text-2xl">Daftar pengajuan</h2>
 
-        <section className="overflow-hidden rounded-3xl bg-white shadow-xl">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E6E6E6] px-9 py-7">
-            <h2 className="text-2xl font-bold">Daftar pengajuan</h2>
-
-            <div className="flex flex-wrap gap-3 text-base font-medium">
-              <span className="rounded-full bg-[#FDEFC3] px-5 py-1.5 text-[#8A5A00]">
+            <div className="flex flex-wrap gap-2 text-sm font-medium">
+              <span className="rounded-full bg-[#FDEFC3] px-4 py-1.5 text-[#8A5A00]">
                 {jumlah.menunggu_verifikasi} menunggu
               </span>
 
-              <span className="rounded-full bg-[#D9F2D9] px-5 py-1.5 text-[#1F6B2E]">
+              <span className="rounded-full bg-[#D9F2D9] px-4 py-1.5 text-[#1F6B2E]">
                 {jumlah.setuju} terverifikasi
               </span>
 
-              <span className="rounded-full bg-[#FDE2E2] px-5 py-1.5 text-[#B42318]">
+              <span className="rounded-full bg-[#FDE2E2] px-4 py-1.5 text-[#B42318]">
                 {jumlah.revisi} revisi
               </span>
             </div>
           </div>
 
+          {/* Tab */}
           <div
             role="tablist"
-            className="flex gap-8 overflow-x-auto border-b border-[#E6E6E6] px-9"
+            className="flex gap-2 overflow-x-auto border-b border-[#E6E6E6] px-3 sm:gap-6 sm:px-8"
           >
             {TAB.map((tab) => {
               const aktif = filterStatus === tab.value;
@@ -938,19 +920,19 @@ export default function AdminPage() {
                   role="tab"
                   aria-selected={aktif}
                   onClick={() => pilihTab(tab.value)}
-                  className={`-mb-px flex items-center gap-3 whitespace-nowrap border-b-[3px] px-1 py-5 text-lg transition ${
+                  className={`-mb-px flex shrink-0 items-center gap-2 whitespace-nowrap border-b-[3px] px-3 py-4 text-sm transition sm:px-1 sm:text-base ${
                     aktif
-                      ? "border-[#404E3B] font-semibold"
-                      : "border-transparent opacity-75 hover:opacity-100"
+                      ? "border-[#404E3B] font-semibold text-[#404E3B]"
+                      : "border-transparent text-[#5b6b55] opacity-80 hover:opacity-100"
                   }`}
                 >
                   {tab.label}
 
                   <span
-                    className={`rounded-full px-3 py-0.5 text-sm font-bold ${
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
                       aktif
                         ? "bg-[#404E3B] text-[#E6E6E6]"
-                        : "bg-[#E6E6E6]"
+                        : "bg-[#E6E6E6] text-[#404E3B]"
                     }`}
                   >
                     {hitung(tab.value)}
@@ -960,27 +942,28 @@ export default function AdminPage() {
             })}
           </div>
 
-          <div className="flex flex-wrap items-center gap-4 px-9 py-6">
-            <label className="relative min-w-[260px] flex-1">
+          {/* Filter */}
+          <div className="flex flex-wrap items-center gap-3 px-5 py-5 sm:px-8">
+            <label className="relative min-w-[240px] flex-1">
               <span className="sr-only">Cari pengajuan</span>
 
-              <IconCari className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 opacity-70" />
+              <IconCari className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 opacity-70" />
 
               <input
                 type="search"
                 value={cari}
                 onChange={(e) => setCari(e.target.value)}
                 placeholder="Cari nama, NIM, perusahaan, no. surat..."
-                className="w-full rounded-xl border border-[#404E3B] bg-white py-3.5 pl-14 pr-4 text-base outline-none focus:ring-2 focus:ring-[#BAC8B1]"
+                className="w-full rounded-xl border border-[#404E3B] bg-white py-3 pl-12 pr-4 text-sm outline-none focus:ring-2 focus:ring-[#BAC8B1] sm:text-base"
               />
             </label>
 
-            <div className="relative min-w-[280px]">
+            <div className="relative min-w-[240px]">
               <select
                 value={filterDep}
                 onChange={(e) => pilihDepartemen(e.target.value)}
                 aria-label="Filter departemen"
-                className="w-full cursor-pointer appearance-none rounded-xl border border-[#404E3B] bg-white py-3.5 pl-5 pr-12 text-base outline-none focus:ring-2 focus:ring-[#BAC8B1]"
+                className="w-full cursor-pointer appearance-none rounded-xl border border-[#404E3B] bg-white py-3 pl-4 pr-10 text-sm outline-none focus:ring-2 focus:ring-[#BAC8B1] sm:text-base"
               >
                 <option value="">Semua departemen</option>
 
@@ -991,11 +974,11 @@ export default function AdminPage() {
                 ))}
               </select>
 
-              <IconPanah className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2" />
+              <IconPanah className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2" />
             </div>
 
             {adaPencarian && (
-              <Button className="!py-3.5" onClick={resetPencarian}>
+              <Button className="!py-3" onClick={resetPencarian}>
                 Reset
               </Button>
             )}
@@ -1004,20 +987,21 @@ export default function AdminPage() {
           {pesanDetail && (
             <div
               role="alert"
-              className="mx-9 mb-4 whitespace-pre-line rounded-lg bg-red-100 p-3 text-sm font-semibold text-red-800"
+              className="mx-5 mb-4 whitespace-pre-line rounded-lg bg-red-100 p-3 text-sm font-semibold text-red-800 sm:mx-8"
             >
               {pesanDetail}
             </div>
           )}
 
+          {/* Tabel */}
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full min-w-[900px] text-left text-sm">
               <thead className="bg-[#E6E6E6]">
                 <tr>
                   {KOLOM.map((heading) => (
                     <th
                       key={heading}
-                      className={`px-6 py-4 text-sm font-semibold uppercase tracking-wide first:pl-9 last:pr-9 ${
+                      className={`px-5 py-3.5 text-xs font-semibold uppercase tracking-wide first:pl-8 last:pr-8 ${
                         heading === "No." ? "text-center" : ""
                       }`}
                     >
@@ -1073,39 +1057,42 @@ export default function AdminPage() {
                     const nomorSurat = nomorSuratTampil(item);
 
                     return (
-                      <tr key={item.id}>
-                        <td className="w-20 px-6 py-4 pl-9 text-center tabular-nums">
+                      <tr
+                        key={item.id}
+                        className="transition-colors hover:bg-[#F8F9F6]"
+                      >
+                        <td className="w-16 px-5 py-4 pl-8 text-center tabular-nums">
                           {nomorAwal + index}
                         </td>
 
-                        <td className="whitespace-nowrap px-6 py-4 font-bold tabular-nums">
+                        <td className="whitespace-nowrap px-5 py-4 font-bold tabular-nums">
                           {nomorSurat ?? (
                             <span className="font-normal opacity-40">—</span>
                           )}
                         </td>
 
-                        <td className="px-6 py-4">
-                          <b>{item.nama || "-"}</b>
-                          <div className="text-xs opacity-70">
+                        <td className="px-5 py-4">
+                          <b className="text-[#404E3B]">{item.nama || "-"}</b>
+                          <div className="text-xs text-[#7a8575]">
                             {item.nim || "-"}
                           </div>
                         </td>
 
-                        <td className="px-6 py-4">{item.departemen || "-"}</td>
+                        <td className="px-5 py-4">{item.departemen || "-"}</td>
 
-                        <td className="px-6 py-4">{item.instansi || "-"}</td>
+                        <td className="px-5 py-4">{item.instansi || "-"}</td>
 
-                        <td className="px-6 py-4 text-xs">
+                        <td className="px-5 py-4 text-xs leading-relaxed">
                           {formatTanggal(item.tanggal_mulai)}
                           <br />
                           s.d. {formatTanggal(item.tanggal_selesai)}
                         </td>
 
-                        <td className="px-6 py-4">
+                        <td className="px-5 py-4">
                           <StatusBadge status={item.status} />
                         </td>
 
-                        <td className="px-6 py-4 pr-9">
+                        <td className="px-5 py-4 pr-8">
                           <Button
                             className="!px-4 !py-2"
                             disabled={membukaId === item.id}
@@ -1121,8 +1108,9 @@ export default function AdminPage() {
             </table>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#E6E6E6] px-9 py-5 text-sm">
-            <span className="opacity-70">
+          {/* Pagination */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#E6E6E6] px-5 py-4 text-sm sm:px-8">
+            <span className="text-[#7a8575]">
               {meta.total > 0
                 ? `Menampilkan ${meta.from ?? 0}–${meta.to ?? 0} dari ${meta.total} pengajuan`
                 : "Tidak ada data"}
@@ -1150,7 +1138,7 @@ export default function AdminPage() {
                         type="button"
                         disabled={loading}
                         onClick={() => setPage(n)}
-                        className={`h-9 min-w-9 rounded-lg border px-2 text-sm font-bold transition ${
+                        className={`h-9 min-w-9 rounded-lg border px-2 text-sm font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B9669] ${
                           n === meta.current_page
                             ? "border-[#404E3B] bg-[#404E3B] text-[#E6E6E6]"
                             : "border-[#BAC8B1] text-[#404E3B] hover:bg-[#BAC8B1]"
@@ -1174,8 +1162,8 @@ export default function AdminPage() {
         </section>
       </main>
 
-      <footer className="bg-[#404E3B] px-6 py-8 text-sm leading-7 text-[#E6E6E6]">
-        <div className="mx-auto w-full max-w-[1680px] 2xl:px-0">
+      <footer className="bg-[#404E3B] px-4 py-8 text-sm leading-7 text-[#E6E6E6] sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-[1680px]">
           <b>SIMAGANG</b> — Sistem Informasi Magang Kampus
           <br />
           Fakultas Kehutanan dan Lingkungan IPB
