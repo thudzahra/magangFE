@@ -1,25 +1,12 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Button, Card, Label, TextInput } from "flowbite-react";
-
-// Warna: #E6E6E6 background | putih card | #404E3B teks & tombol | #7B9669 border | #BAC8B1 hover
-const inputTheme = {
-  field: {
-    input: {
-      colors: {
-        gray: "border-[#7B9669] bg-[#E6E6E6] text-[#404E3B] placeholder-[#7a8575] focus:border-[#404E3B] focus:ring-[#7B9669]",
-        failure: "border-[#b42318] bg-[#E6E6E6] text-[#404E3B] placeholder-[#7a8575] focus:border-[#b42318] focus:ring-[#b42318]",
-      },
-    },
-  },
-};
+import { Button, Card, Label } from "flowbite-react";
 
 
 const API_URL = import.meta.env.VITE_API_URL || "http://10.6.74.152:8000";
 
 const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
-// Ikon mata untuk lihat / sembunyikan password
 function EyeIcon({ off }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -30,7 +17,6 @@ function EyeIcon({ off }) {
   );
 }
 
-// Huruf pertama tiap kata otomatis kapital (contoh: "budi santoso" -> "Budi Santoso")
 const capitalizeWords = (str) => str.replace(/(^|\s)(\S)/g, (_, space, ch) => space + ch.toUpperCase());
 
 export default function Signup() {
@@ -81,7 +67,7 @@ export default function Signup() {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({
-          name: nama, // backend meminta "name", bukan "nama"
+          name: nama,
           email,
           nim,
           password: form.password,
@@ -91,7 +77,6 @@ export default function Signup() {
       const data = await response.json();
 
       if (!response.ok) {
-        // error validasi Laravel: { message, errors: { field: ["pesan"] } }
         const apiErrors = {};
         if (data.errors) {
           Object.keys(data.errors).forEach((key) => {
@@ -123,62 +108,75 @@ export default function Signup() {
           </div>
 
           <Label htmlFor="nama" className="mb-1 text-[#404E3B]">Nama</Label>
-          <TextInput
+          <input
             id="nama"
-            theme={inputTheme}
+            type="text"
             autoComplete="name"
             autoCapitalize="words"
             value={form.nama}
             onChange={update("nama")}
             placeholder="Nama lengkap"
-            color={errors.nama ? "failure" : "white"}
+            className={`w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition-colors ${errors.nama
+                ? "border-[#b42318] bg-white focus:border-[#b42318] focus:ring-1 focus:ring-[#b42318]"
+                : "border-[#7B9669] bg-white focus:border-[#404E3B] focus:ring-1 focus:ring-[#404E3B]"
+              }`}
           />
           <p className="mb-2 min-h-5 text-xs font-medium text-[#b42318]">{errors.nama}</p>
 
           <Label htmlFor="email" className="mb-1 text-[#404E3B]">Email</Label>
-          <TextInput
+          <input
             id="email"
-            theme={inputTheme}
             type="email"
             autoComplete="email"
             value={form.email}
             onChange={update("email")}
             placeholder="nama@email.com"
-            color={errors.email ? "failure" : "white"}
+            className={`w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition-colors ${errors.email
+                ? "border-[#b42318] bg-white focus:border-[#b42318] focus:ring-1 focus:ring-[#b42318]"
+                : "border-[#7B9669] bg-white focus:border-[#404E3B] focus:ring-1 focus:ring-[#404E3B]"
+              }`}
           />
           <p className="mb-2 min-h-5 text-xs font-medium text-[#b42318]">{errors.email}</p>
 
           <Label htmlFor="nim" className="mb-1 text-[#404E3B]">NIM</Label>
-          <TextInput
+          <input
             id="nim"
-            theme={inputTheme}
+            type="text"
             maxLength={11}
             autoComplete="off"
             autoCapitalize="characters"
             value={form.nim}
             onChange={update("nim")}
             placeholder="Contoh: E1410000000"
-            color={errors.nim ? "failure" : "white"}
+            className={`w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition-colors ${errors.nim
+                ? "border-[#b42318] bg-white focus:border-[#b42318] focus:ring-1 focus:ring-[#b42318]"
+                : "border-[#7B9669] bg-white focus:border-[#404E3B] focus:ring-1 focus:ring-[#404E3B]"
+              }`}
           />
           <p className="mb-2 min-h-5 text-xs font-medium text-[#b42318]">{errors.nim}</p>
 
           <Label htmlFor="password" className="mb-1 text-[#404E3B]">Password</Label>
-          <div className="relative">
-            <TextInput
+          {/* CONTAINER PASSWORD */}
+          <div
+            className={`flex w-full items-stretch overflow-hidden rounded-lg border bg-white transition-colors focus-within:ring-1 ${errors.password
+                ? "border-[#b42318] focus-within:border-[#b42318] focus-within:ring-[#b42318]"
+                : "border-[#7B9669] focus-within:border-[#404E3B] focus-within:ring-[#404E3B]"
+              }`}
+          >
+            <input
               id="password"
-              theme={inputTheme}
               type={showPw ? "text" : "password"}
               value={form.password}
               onChange={update("password")}
               placeholder="Minimal 8 karakter"
               autoComplete="new-password"
-              color={errors.password ? "failure" : "white"}
+              className="w-full bg-transparent px-3 py-2.5 text-sm outline-none placeholder-[#7a8575]"
             />
             <button
               type="button"
               onClick={() => setShowPw((s) => !s)}
               aria-label={showPw ? "Sembunyikan password" : "Lihat password"}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#404E3B] hover:text-[#7B9669]"
+              className="flex shrink-0 items-center justify-center px-3 text-[#404E3B] hover:text-[#7B9669]"
             >
               <EyeIcon off={showPw} />
             </button>
@@ -186,22 +184,27 @@ export default function Signup() {
           <p className="mb-2 min-h-5 text-xs font-medium text-[#b42318]">{errors.password}</p>
 
           <Label htmlFor="password_confirmation" className="mb-1 text-[#404E3B]">Konfirmasi Password</Label>
-          <div className="relative">
-            <TextInput
+          {/* CONTAINER KONFIRMASI PASSWORD */}
+          <div
+            className={`flex w-full items-stretch overflow-hidden rounded-lg border bg-white transition-colors focus-within:ring-1 ${errors.password_confirmation
+                ? "border-[#b42318] focus-within:border-[#b42318] focus-within:ring-[#b42318]"
+                : "border-[#7B9669] focus-within:border-[#404E3B] focus-within:ring-[#404E3B]"
+              }`}
+          >
+            <input
               id="password_confirmation"
-              theme={inputTheme}
               type={showPw2 ? "text" : "password"}
               value={form.password_confirmation}
               onChange={update("password_confirmation")}
               placeholder="Ulangi password"
               autoComplete="new-password"
-              color={errors.password_confirmation ? "failure" : "white"}
+              className="w-full bg-transparent px-3 py-2.5 text-sm outline-none placeholder-[#7a8575]"
             />
             <button
               type="button"
               onClick={() => setShowPw2((s) => !s)}
               aria-label={showPw2 ? "Sembunyikan password" : "Lihat password"}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#404E3B] hover:text-[#7B9669]"
+              className="flex shrink-0 items-center justify-center px-3 text-[#404E3B] hover:text-[#7B9669]"
             >
               <EyeIcon off={showPw2} />
             </button>
@@ -215,6 +218,7 @@ export default function Signup() {
           >
             {loading ? "Memproses..." : "Daftar"}
           </Button>
+
           {errors.form && <p className="mt-2 text-sm font-medium text-[#b42318]">{errors.form}</p>}
 
           <p className="mt-4 text-center text-sm text-[#404E3B]">

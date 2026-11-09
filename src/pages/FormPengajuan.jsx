@@ -3,8 +3,8 @@ import { Alert, Button, FileInput, Label, Textarea, TextInput } from "flowbite-r
 
 const API = "http://10.6.74.152:8000/api";
 const ENDPOINT = {
-  buat: "/pengajuan-magang", // POST = buat pengajuan, GET = daftar pengajuan milik mahasiswa
-  ubah: (id) => `/pengajuan-magang/${id}`, // PUT = ubah, GET = detail
+  buat: "/pengajuan-magang",
+  ubah: (id) => `/pengajuan-magang/${id}`,
   preview: (id) => `/pengajuan-magang/${id}/preview-surat`,
   tandaTangan: (id) => `/pengajuan-magang/${id}/tanda-tangan`,
   kirim: (id) => `/pengajuan-magang/${id}/kirim`,
@@ -26,7 +26,6 @@ const NAMA_DEPARTEMEN = {
   SVK: "Silvikultur",
 };
 
-// Departemen bisa berupa kode ("SVK"), nama, atau objek { kode, nama }
 const namaDep = (dep) => {
   if (!dep) return "";
   if (typeof dep === "object") return dep.nama ?? NAMA_DEPARTEMEN[dep.kode] ?? dep.kode ?? "";
@@ -112,7 +111,6 @@ const validasiBerkas = (file, namaBerkas) => {
   return "";
 };
 
-// Data yang dikirim ke server untuk membuat / memperbarui pengajuan
 const bentukData = (f) => ({
   nama: f.nama.trim(),
   nim: f.nim.trim(),
@@ -122,10 +120,6 @@ const bentukData = (f) => ({
   tanggal_mulai: f.tanggal_mulai,
   tanggal_selesai: f.tanggal_selesai,
 });
-
-// =====================================================
-// DATA RIWAYAT
-// =====================================================
 
 const unwrap = (response) => response?.data ?? response;
 
@@ -240,39 +234,48 @@ const normalisasiRiwayat = (item = {}) => {
 // KOMPONEN KECIL
 // =====================================================
 
-function Field({ id, label, error, optional, children }) {
+function Field({ id, label, error, optional, hint, children }) {
   return (
-    <div className="flex flex-col">
-      <Label htmlFor={id} className="mb-1 font-semibold text-[#404E3B]">
+    <div className="flex w-full flex-col">
+      <Label htmlFor={id} className="mb-1.5 block text-sm font-semibold text-[#404E3B]">
         {label} {!optional && <span className="text-[#b42318]">*</span>}
       </Label>
-      {children}
-      <p className="mt-1 min-h-5 text-xs font-medium text-[#b42318]">{error}</p>
+      <div className="w-full">{children}</div>
+      {hint && <p className="mt-1 text-xs text-[#7a8575]">{hint}</p>}
+      <p className="mt-1 min-h-[1.25rem] text-xs font-medium text-[#b42318]">{error}</p>
     </div>
   );
 }
 
 function Stepper({ step }) {
   return (
-    <ol className="mb-8 flex items-center">
+    <ol className="mb-8 flex w-full items-start">
       {STEPS.map((label, i) => (
-        <li key={label} className={`flex items-center ${i < STEPS.length - 1 ? "flex-1" : ""}`}>
-          <span
-            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-sm font-semibold ${
-              i <= step ? "border-[#404E3B] bg-[#404E3B] text-[#E6E6E6]" : "border-[#BAC8B1] text-[#7B9669]"
-            }`}
-          >
-            {i < step ? "✓" : i + 1}
-          </span>
-          <span
-            className={`ml-2 text-sm font-semibold ${
-              i === step ? "inline text-[#404E3B]" : "hidden text-[#7B9669] sm:inline"
-            }`}
-          >
-            {label}
-          </span>
+        <li key={label} className={`flex items-start ${i < STEPS.length - 1 ? "flex-1" : ""}`}>
+          <div className="flex flex-col items-center gap-1.5 sm:flex-row sm:gap-2">
+            <span
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 text-sm font-semibold transition-colors ${
+                i <= step
+                  ? "border-[#404E3B] bg-[#404E3B] text-[#E6E6E6]"
+                  : "border-[#BAC8B1] bg-white text-[#7B9669]"
+              }`}
+            >
+              {i < step ? "✓" : i + 1}
+            </span>
+            <span
+              className={`max-w-[72px] text-center text-xs font-semibold leading-tight sm:max-w-none sm:text-left sm:text-sm ${
+                i === step ? "text-[#404E3B]" : "text-[#7B9669]"
+              } ${i === step ? "block" : "hidden sm:block"}`}
+            >
+              {label}
+            </span>
+          </div>
           {i < STEPS.length - 1 && (
-            <span className={`mx-3 h-px flex-1 ${i < step ? "bg-[#404E3B]" : "bg-[#BAC8B1]"}`} />
+            <span
+              className={`mx-2 mt-4 h-0.5 flex-1 rounded-full sm:mx-3 ${
+                i < step ? "bg-[#404E3B]" : "bg-[#BAC8B1]"
+              }`}
+            />
           )}
         </li>
       ))}
@@ -284,7 +287,9 @@ function StatusBadge({ status }) {
   const config = STATUS[status] ?? { label: status, className: "bg-gray-200 text-gray-700" };
 
   return (
-    <span className={`inline-block w-fit rounded-full px-3 py-1 text-xs font-semibold ${config.className}`}>
+    <span
+      className={`inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-semibold ${config.className}`}
+    >
       {config.label}
     </span>
   );
@@ -294,21 +299,35 @@ function BerkasBaris({ berkas, terbuka, onToggle }) {
   const gambar = ["jpg", "jpeg", "png", "gif", "webp"].includes(berkas.ekstensi);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-[#BAC8B1] bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
-        <strong>{berkas.label}</strong>
+    <div className="overflow-hidden rounded-xl border border-[#BAC8B1] bg-white shadow-sm transition-shadow hover:shadow-md">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <strong className="text-sm text-[#404E3B]">{berkas.label}</strong>
 
-        <span className="flex flex-wrap gap-4">
-          <button type="button" onClick={onToggle} className="underline">
-            {terbuka ? "Sembunyikan preview" : "Lihat preview"}
+        <span className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-medium">
+          <button
+            type="button"
+            onClick={onToggle}
+            className="inline-flex items-center gap-1 rounded text-[#404E3B] underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B9669]"
+          >
+            {terbuka ? "Sembunyikan" : "Preview"}
           </button>
 
-          <a href={berkas.preview_url} target="_blank" rel="noreferrer" className="underline">
+          <a
+            href={berkas.preview_url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-[#404E3B] underline-offset-2 hover:underline"
+          >
             Buka berkas
           </a>
 
           {berkas.download_url && (
-            <a href={berkas.download_url} target="_blank" rel="noreferrer" className="underline">
+            <a
+              href={berkas.download_url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-[#404E3B] underline-offset-2 hover:underline"
+            >
               Download
             </a>
           )}
@@ -333,13 +352,11 @@ function BerkasBaris({ berkas, terbuka, onToggle }) {
   );
 }
 
-// Tampilan riwayat: isi formulir yang sama, hanya dibaca (tidak bisa diubah)
 function FormRiwayat({ item, memuatDetail }) {
   const [terbuka, setTerbuka] = useState({});
 
   const berkasServer = item.daftarBerkas.filter((b) => b.jenis !== "surat-magang" || item.status === "setuju");
 
-  // Berkas yang baru saja diunggah di perangkat ini (dipakai jika server belum mengirim tautan berkas)
   const berkasLokal = (Array.isArray(item.berkasLokal) ? item.berkasLokal : [])
     .filter((l) => !berkasServer.some((b) => b.jenis === l.jenis))
     .map((l) => ({
@@ -353,11 +370,11 @@ function FormRiwayat({ item, memuatDetail }) {
   const berkas = [...berkasServer, ...berkasLokal];
 
   return (
-    <div className="p-6 sm:p-8">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+    <div className="w-full p-5 sm:p-8 lg:p-10">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3 rounded-xl bg-[#F4F6F2] px-4 py-3">
         <div>
-          <p className="font-bold">Pengajuan #{item.id}</p>
-          <p className="text-xs opacity-70">Dikirim {formatTanggal(item.dikirim)}</p>
+          <p className="text-sm font-bold text-[#404E3B]">Pengajuan #{item.id}</p>
+          <p className="mt-0.5 text-xs text-[#7a8575]">Dikirim {formatTanggal(item.dikirim)}</p>
         </div>
 
         <StatusBadge status={item.status} />
@@ -365,54 +382,66 @@ function FormRiwayat({ item, memuatDetail }) {
 
       <Stepper step={STEPS.length} />
 
-      {memuatDetail && <p className="mb-3 text-sm opacity-70">Memuat detail pengajuan...</p>}
+      {memuatDetail && (
+        <p className="mb-3 animate-pulse text-sm text-[#7a8575]">Memuat detail pengajuan...</p>
+      )}
 
       {item.status === "setuju" && item.nomorSurat && (
         <div className="mb-4">
           <Field id="r-nomor" label="Nomor surat" optional>
-            <TextInput id="r-nomor" theme={inputTheme} value={item.nomorSurat} readOnly color="gray" className="cursor-default font-bold" />
+            <TextInput
+              id="r-nomor"
+              theme={inputTheme}
+              value={item.nomorSurat}
+              readOnly
+              color="gray"
+              className="w-full cursor-default font-bold tracking-wide"
+            />
           </Field>
         </div>
       )}
 
       {item.status === "revisi" && item.catatan_revisi && (
-        <div className="mb-6 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800">
-          <b>Catatan revisi dari admin:</b>
+        <div className="mb-6 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800">
+          <b className="block">Catatan revisi dari admin:</b>
           <p className="mt-1 whitespace-pre-line">{item.catatan_revisi}</p>
         </div>
       )}
 
-      <div className="grid gap-x-4 sm:grid-cols-2">
+      <div className="grid w-full gap-x-4 sm:grid-cols-2">
         <Field id="r-nama" label="Nama lengkap" optional>
-          <TextInput id="r-nama" theme={inputTheme} value={item.nama} readOnly color="gray" className="cursor-default" />
+          <TextInput id="r-nama" theme={inputTheme} value={item.nama} readOnly color="gray" className="w-full cursor-default" />
         </Field>
         <Field id="r-nim" label="NIM" optional>
-          <TextInput id="r-nim" theme={inputTheme} value={item.nim} readOnly color="gray" className="cursor-default" />
+          <TextInput id="r-nim" theme={inputTheme} value={item.nim} readOnly color="gray" className="w-full cursor-default" />
         </Field>
+        <div className="sm:col-span-2">
+          <Field id="r-dep" label="Departemen / program studi" optional>
+            <TextInput id="r-dep" theme={inputTheme} value={item.departemen} readOnly color="gray" className="w-full cursor-default" />
+          </Field>
+        </div>
       </div>
 
-      <Field id="r-dep" label="Departemen / program studi" optional>
-        <TextInput id="r-dep" theme={inputTheme} value={item.departemen} readOnly color="gray" className="cursor-default" />
-      </Field>
-
       <Field id="r-instansi" label="Nama instansi / perusahaan" optional>
-        <TextInput id="r-instansi" theme={inputTheme} value={item.instansi || "-"} readOnly color="gray" className="cursor-default" />
+        <TextInput id="r-instansi" theme={inputTheme} value={item.instansi || "-"} readOnly color="gray" className="w-full cursor-default" />
       </Field>
 
       <Field id="r-alamat" label="Alamat instansi" optional>
-        <Textarea id="r-alamat" theme={textareaTheme} rows={3} value={item.alamat} readOnly color="gray" className="cursor-default" />
+        <Textarea id="r-alamat" theme={textareaTheme} rows={3} value={item.alamat} readOnly color="gray" className="w-full cursor-default" />
       </Field>
 
-      <div className="grid gap-x-4 sm:grid-cols-2">
+      <div className="grid w-full gap-x-4 sm:grid-cols-2">
         <Field id="r-mulai" label="Tanggal mulai" optional>
-          <TextInput id="r-mulai" theme={inputTheme} value={formatTanggal(item.tanggal_mulai)} readOnly color="gray" className="cursor-default" />
+          <TextInput id="r-mulai" theme={inputTheme} value={formatTanggal(item.tanggal_mulai)} readOnly color="gray" className="w-full cursor-default" />
         </Field>
         <Field id="r-selesai" label="Tanggal selesai" optional>
-          <TextInput id="r-selesai" theme={inputTheme} value={formatTanggal(item.tanggal_selesai)} readOnly color="gray" className="cursor-default" />
+          <TextInput id="r-selesai" theme={inputTheme} value={formatTanggal(item.tanggal_selesai)} readOnly color="gray" className="w-full cursor-default" />
         </Field>
       </div>
 
-      <div className="mb-2 mt-2 font-semibold">Surat dan berkas</div>
+      <div className="mb-3 mt-4 border-t border-[#BAC8B1] pt-4 text-sm font-semibold text-[#404E3B]">
+        Surat dan berkas
+      </div>
 
       {berkas.length > 0 ? (
         <div className="space-y-3">
@@ -426,7 +455,9 @@ function FormRiwayat({ item, memuatDetail }) {
           ))}
         </div>
       ) : (
-        <p className="text-sm opacity-70">Berkas belum tersedia untuk dilihat.</p>
+        <p className="rounded-lg border border-dashed border-[#BAC8B1] px-4 py-6 text-center text-sm text-[#7a8575]">
+          Berkas belum tersedia untuk dilihat.
+        </p>
       )}
     </div>
   );
@@ -459,11 +490,10 @@ export default function FormPengajuan() {
   const [versiPreview, setVersiPreview] = useState(0);
   const [preview, setPreview] = useState({ src: "", srcDoc: "", loading: false, error: "" });
 
-  // Riwayat pengajuan yang sudah dikirim
   const [riwayat, setRiwayat] = useState([]);
   const [memuatRiwayat, setMemuatRiwayat] = useState(true);
   const [buatBaru, setBuatBaru] = useState(false);
-  const [sedangRevisi, setSedangRevisi] = useState(null); // { id, catatan } saat memperbaiki pengajuan
+  const [sedangRevisi, setSedangRevisi] = useState(null);
   const [versiForm, setVersiForm] = useState(0);
   const [pilihId, setPilihId] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -471,13 +501,10 @@ export default function FormPengajuan() {
 
   const tampilRiwayat = riwayat.length > 0 && !buatBaru;
 
-  // Pengajuan yang masih berjalan (menunggu / perlu revisi): tidak boleh membuat pengajuan baru
   const adaBerjalan = riwayat.some((p) => p.status === "menunggu_verifikasi" || p.status === "revisi");
 
-  // Di langkah tanda tangan, tombol Lanjut berwarna abu-abu selama surat belum disetujui
   const belumSetuju = step === 2 && !disetujui;
 
-  // Ambil daftar pengajuan yang sudah dikirim. `lokal` = cadangan jika server belum mengembalikannya.
   const muatRiwayat = async (lokal = null) => {
     let hasil = [];
 
@@ -493,7 +520,6 @@ export default function FormPengajuan() {
 
     if (lokal) {
       if (hasil.some((p) => String(p.id) === String(lokal.id))) {
-        // pengajuan sudah ada di server: tempelkan berkas yang baru diunggah agar bisa dilihat
         hasil = hasil.map((p) =>
           String(p.id) === String(lokal.id) ? { ...p, berkasLokal: lokal.berkasLokal } : p
         );
@@ -514,7 +540,6 @@ export default function FormPengajuan() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Detail pengajuan yang dipilih (untuk berkas, nomor surat, catatan revisi)
   useEffect(() => {
     if (!tampilRiwayat || pilihId == null) {
       setDetail(null);
@@ -699,7 +724,6 @@ export default function FormPengajuan() {
     try {
       await panggilApi(ENDPOINT.kirim(pengajuanId.current), { formData: body });
 
-      // Pengajuan terkirim: isi formulir tetap tersimpan sebagai riwayat
       await muatRiwayat({
         id: pengajuanId.current,
         nama: form.nama,
@@ -735,7 +759,6 @@ export default function FormPengajuan() {
     }
   };
 
-  // Mulai pengajuan baru: formulir dikosongkan, riwayat tetap ada
   const mulaiBaru = () => {
     pengajuanId.current = null;
     snapshotDraft.current = "";
@@ -750,7 +773,6 @@ export default function FormPengajuan() {
     setBuatBaru(true);
   };
 
-  // Perbaiki pengajuan yang diminta revisi: data lama dimuat kembali dan pengajuan yang SAMA diperbarui
   const perbaiki = (item) => {
     const terisi = {
       ...dataAwal,
@@ -784,41 +806,53 @@ export default function FormPengajuan() {
     detail && String(detail.id) === String(pilihId) ? { ...dariDaftar, ...detail } : dariDaftar;
 
   return (
-    <div className="min-h-screen bg-[#E6E6E6] text-[#404E3B]">
-      <header className="border-b border-[#BAC8B1] bg-white">
-        <div className="flex items-center justify-between gap-4 px-6 py-3 lg:px-40">
-          <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#404E3B] text-sm font-bold text-[#E6E6E6]">SM</span>
-            <span className="text-lg font-bold">SIMAGANG</span>
+    <div className="min-h-screen w-full bg-[#E6E6E6] text-[#404E3B] antialiased">
+      {/* HEADER — full width */}
+      <header className="sticky top-0 z-20 w-full border-b border-[#BAC8B1] bg-white/95 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-[1680px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#404E3B] text-sm font-bold text-[#E6E6E6]">
+              SM
+            </span>
+            <span className="text-lg font-bold tracking-tight text-[#404E3B]">SIMAGANG</span>
           </div>
           <button
             type="button"
             onClick={logout}
-            className="rounded-lg bg-[#404E3B] px-4 py-2 text-sm font-bold text-[#E6E6E6] transition hover:bg-[#BAC8B1] hover:text-[#404E3B]"
+            className="rounded-lg border border-transparent bg-[#404E3B] px-4 py-2 text-sm font-bold text-[#E6E6E6] transition-colors hover:border-[#404E3B] hover:bg-[#BAC8B1] hover:text-[#404E3B] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B9669] focus-visible:ring-offset-1"
           >
             Log Out
           </button>
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-4 py-8">
-        <h1 className="text-center text-3xl font-bold">
-          {tampilRiwayat ? "Riwayat pengajuan" : sedangRevisi ? "Perbaiki pengajuan" : "Formulir pengajuan"}
-        </h1>
-        <p className="mb-8 mt-2 text-center text-[#404E3B]">
-          {tampilRiwayat
-            ? "Pengajuan yang sudah kamu kirim tersimpan di sini beserta statusnya."
-            : "Pastikan semua data terisi dengan benar sebelum mengirim."}
-        </p>
+      {/* MAIN — full width */}
+      <main className="mx-auto w-full max-w-[1680px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+        {/* JUDUL */}
+        <div className="mb-8 w-full">
+          <h1 className="text-2xl font-bold sm:text-3xl">
+            {tampilRiwayat ? "Riwayat pengajuan" : sedangRevisi ? "Perbaiki pengajuan" : "Formulir pengajuan"}
+          </h1>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#5b6b55]">
+            {tampilRiwayat
+              ? "Pengajuan yang sudah kamu kirim tersimpan di sini beserta statusnya."
+              : "Pastikan semua data terisi dengan benar sebelum mengirim."}
+          </p>
+        </div>
 
+        {/* LOADING */}
         {memuatRiwayat && (
-          <div className="rounded-2xl bg-white p-8 text-center shadow-lg">Memuat data...</div>
+          <div className="flex w-full flex-col items-center justify-center gap-3 rounded-2xl bg-white p-12 shadow-lg">
+            <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#BAC8B1] border-t-[#404E3B]" />
+            <p className="text-sm text-[#7a8575]">Memuat data...</p>
+          </div>
         )}
 
+        {/* RIWAYAT */}
         {!memuatRiwayat && tampilRiwayat && aktif && (
-          <div className="space-y-6">
+          <div className="w-full space-y-6">
             {riwayat.length > 1 && (
-              <div className="space-y-2">
+              <div className="grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {riwayat.map((p) => {
                   const dipilih = String(p.id) === String(pilihId);
 
@@ -828,15 +862,15 @@ export default function FormPengajuan() {
                       type="button"
                       onClick={() => setPilihId(p.id)}
                       aria-pressed={dipilih}
-                      className={`flex w-full flex-wrap items-center justify-between gap-3 rounded-xl border px-5 py-4 text-left transition ${
+                      className={`flex w-full flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3.5 text-left transition-all ${
                         dipilih
-                          ? "border-[#404E3B] bg-white shadow-md"
-                          : "border-[#BAC8B1] bg-white/70 hover:bg-white"
+                          ? "border-[#404E3B] bg-white shadow-md ring-1 ring-[#404E3B]/20"
+                          : "border-[#BAC8B1] bg-white/70 hover:bg-white hover:shadow-sm"
                       }`}
                     >
-                      <span>
-                        <b className="block">{p.instansi || "-"}</b>
-                        <span className="text-xs opacity-70">Dikirim {formatTanggal(p.dikirim)}</span>
+                      <span className="min-w-0">
+                        <b className="block truncate text-sm text-[#404E3B]">{p.instansi || "-"}</b>
+                        <span className="text-xs text-[#7a8575]">Dikirim {formatTanggal(p.dikirim)}</span>
                       </span>
                       <StatusBadge status={p.status} />
                     </button>
@@ -845,16 +879,18 @@ export default function FormPengajuan() {
               </div>
             )}
 
-            <div className="overflow-hidden rounded-2xl bg-white shadow-lg">
-              <div className="bg-gradient-to-r from-[#404E3B] to-[#7B9669] px-6 py-6 text-[#E6E6E6] sm:px-8">
-                <h2 className="text-xl font-bold">Formulir pengajuan surat pengantar magang</h2>
-                <p className="mt-1 text-sm">Data di bawah adalah pengajuan yang sudah dikirim dan tidak dapat diubah.</p>
+            <div className="w-full overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-black/5">
+              <div className="bg-gradient-to-r from-[#404E3B] to-[#7B9669] px-6 py-6 text-[#E6E6E6] sm:px-8 lg:px-10">
+                <h2 className="text-lg font-bold sm:text-xl">Formulir pengajuan surat pengantar magang</h2>
+                <p className="mt-1 text-sm text-[#E6E6E6]/80">
+                  Data di bawah adalah pengajuan yang sudah dikirim dan tidak dapat diubah.
+                </p>
               </div>
 
               <FormRiwayat key={aktif.id} item={aktif} memuatDetail={memuatDetail} />
 
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#BAC8B1] px-6 py-5 sm:px-8">
-                <p className="text-sm">
+              <div className="flex flex-col gap-3 border-t border-[#BAC8B1] bg-[#F8F9F6] px-5 py-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-8 lg:px-10">
+                <p className="text-sm leading-relaxed text-[#5b6b55]">
                   {aktif.status === "revisi" &&
                     "Pengajuan ini perlu diperbaiki. Perbaikan akan memperbarui pengajuan yang sama, bukan membuat yang baru."}
                   {aktif.status === "menunggu_verifikasi" && "Pengajuan sedang diverifikasi oleh admin."}
@@ -865,7 +901,7 @@ export default function FormPengajuan() {
                   <Button
                     type="button"
                     onClick={() => perbaiki(aktif)}
-                    className="border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
+                    className="w-full border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B] focus:ring-[#7B9669] sm:w-auto"
                   >
                     Perbaiki pengajuan
                   </Button>
@@ -875,7 +911,7 @@ export default function FormPengajuan() {
                   <Button
                     type="button"
                     onClick={mulaiBaru}
-                    className="border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
+                    className="w-full border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B] focus:ring-[#7B9669] sm:w-auto"
                   >
                     Buat pengajuan baru
                   </Button>
@@ -885,6 +921,7 @@ export default function FormPengajuan() {
           </div>
         )}
 
+        {/* FORMULIR */}
         {!memuatRiwayat && !tampilRiwayat && (
           <>
             {riwayat.length > 0 && (
@@ -894,66 +931,70 @@ export default function FormPengajuan() {
                   setBuatBaru(false);
                   setSedangRevisi(null);
                 }}
-                className="mb-4 text-sm font-semibold underline hover:text-[#7B9669]"
+                className="mb-4 inline-flex items-center gap-1 rounded text-sm font-semibold text-[#404E3B] underline-offset-2 hover:text-[#7B9669] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B9669]"
               >
                 ← Kembali ke riwayat pengajuan
               </button>
             )}
 
             {sedangRevisi?.catatan && (
-              <div className="mb-4 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800">
-                <b>Catatan revisi dari admin:</b>
+              <div className="mb-4 w-full rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800">
+                <b className="block">Catatan revisi dari admin:</b>
                 <p className="mt-1 whitespace-pre-line">{sedangRevisi.catatan}</p>
               </div>
             )}
 
-            <div key={versiForm} className="overflow-hidden rounded-2xl bg-white shadow-lg">
-              <div className="bg-gradient-to-r from-[#404E3B] to-[#7B9669] px-6 py-6 text-[#E6E6E6] sm:px-8">
-                <h2 className="text-xl font-bold">Formulir pengajuan surat pengantar magang</h2>
-                <p className="mt-1 text-sm">
+            <div key={versiForm} className="w-full overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-black/5">
+              <div className="bg-gradient-to-r from-[#404E3B] to-[#7B9669] px-6 py-6 text-[#E6E6E6] sm:px-8 lg:px-10">
+                <h2 className="text-lg font-bold sm:text-xl">Formulir pengajuan surat pengantar magang</h2>
+                <p className="mt-1 text-sm text-[#E6E6E6]/80">
                   {sedangRevisi
                     ? `Perbaiki data pengajuan #${sedangRevisi.id}, lalu kirim ulang. Pengajuan yang sama akan diperbarui.`
                     : "Lengkapi 4 langkah berikut. Surat akan diverifikasi admin sebelum diterbitkan resmi."}
                 </p>
               </div>
 
-              <div className="p-6 sm:p-8">
+              {/* ISI FORM — full width */}
+              <div className="w-full p-5 sm:p-8 lg:p-10">
                 <Stepper step={step} />
 
+                {/* STEP 0 */}
                 {step === 0 && (
-                  <div>
-                    <div className="grid gap-x-4 sm:grid-cols-2">
-                      <Field id="nama" label="Nama lengkap" error={errors.nama}>
+                  <div className="grid w-full gap-x-4 sm:grid-cols-2">
+                    <Field id="nama" label="Nama lengkap" error={errors.nama}>
+                      <TextInput
+                        id="nama" theme={inputTheme} value={form.nama} onChange={update("nama")}
+                        readOnly className="w-full cursor-not-allowed opacity-80"
+                        color={errors.nama ? "failure" : "gray"}
+                      />
+                    </Field>
+                    <Field id="nim" label="NIM" error={errors.nim}>
+                      <TextInput
+                        id="nim" theme={inputTheme} value={form.nim} onChange={update("nim")}
+                        readOnly className="w-full cursor-not-allowed opacity-80"
+                        maxLength={11} color={errors.nim ? "failure" : "gray"}
+                      />
+                    </Field>
+                    <div className="sm:col-span-2">
+                      <Field id="departemen" label="Departemen / program studi" error={errors.departemen}>
                         <TextInput
-                          id="nama" theme={inputTheme} value={form.nama} onChange={update("nama")}
-                          readOnly className="cursor-not-allowed opacity-80"
-                          color={errors.nama ? "failure" : "gray"}
-                        />
-                      </Field>
-                      <Field id="nim" label="NIM" error={errors.nim}>
-                        <TextInput
-                          id="nim" theme={inputTheme} value={form.nim} onChange={update("nim")}
-                          readOnly className="cursor-not-allowed opacity-80"
-                          maxLength={11} color={errors.nim ? "failure" : "gray"}
+                          id="departemen" theme={inputTheme} value={form.departemen}
+                          readOnly className="w-full cursor-not-allowed opacity-80"
+                          color={errors.departemen ? "failure" : "gray"}
                         />
                       </Field>
                     </div>
-                    <Field id="departemen" label="Departemen / program studi" error={errors.departemen}>
-                      <TextInput
-                        id="departemen" theme={inputTheme} value={form.departemen}
-                        readOnly className="cursor-not-allowed opacity-80"
-                        color={errors.departemen ? "failure" : "gray"}
-                      />
-                    </Field>
                   </div>
                 )}
 
+                {/* STEP 1 */}
                 {step === 1 && (
-                  <div>
+                  <div className="w-full">
                     <Field id="instansi" label="Nama instansi / perusahaan" error={errors.instansi}>
                       <TextInput
                         id="instansi" theme={inputTheme} value={form.instansi} onChange={update("instansi")}
                         placeholder="cth. PT Maju Bersama" color={errors.instansi ? "failure" : "gray"}
+                        className="w-full"
                       />
                     </Field>
                     <Field id="alamat_instansi" label="Alamat instansi" error={errors.alamat_instansi}>
@@ -961,36 +1002,45 @@ export default function FormPengajuan() {
                         id="alamat_instansi" theme={textareaTheme} rows={3} value={form.alamat_instansi}
                         onChange={update("alamat_instansi")}
                         placeholder="Alamat lengkap instansi" color={errors.alamat_instansi ? "failure" : "gray"}
+                        className="w-full"
                       />
                     </Field>
-                    <div className="grid gap-x-4 sm:grid-cols-2">
+                    <div className="grid w-full gap-x-4 sm:grid-cols-2">
                       <Field id="tanggal_mulai" label="Tanggal mulai" error={errors.tanggal_mulai}>
                         <TextInput
                           id="tanggal_mulai" theme={inputTheme} type="date" value={form.tanggal_mulai}
                           onChange={update("tanggal_mulai")} color={errors.tanggal_mulai ? "failure" : "gray"}
+                          className="w-full"
                         />
                       </Field>
                       <Field id="tanggal_selesai" label="Tanggal selesai" error={errors.tanggal_selesai}>
                         <TextInput
                           id="tanggal_selesai" theme={inputTheme} type="date" value={form.tanggal_selesai}
                           onChange={update("tanggal_selesai")} color={errors.tanggal_selesai ? "failure" : "gray"}
+                          className="w-full"
                         />
                       </Field>
                     </div>
                   </div>
                 )}
 
+                {/* STEP 2 */}
                 {step === 2 && (
-                  <div>
-                    <div className="mb-4 overflow-hidden rounded-lg border border-[#BAC8B1] bg-white">
-                      {preview.loading && <p className="p-6 text-sm">Memuat preview surat...</p>}
+                  <div className="w-full">
+                    <div className="mb-5 w-full overflow-hidden rounded-xl border border-[#BAC8B1] bg-white">
+                      {preview.loading && (
+                        <div className="flex items-center justify-center gap-3 p-10">
+                          <span className="h-6 w-6 animate-spin rounded-full border-2 border-[#BAC8B1] border-t-[#404E3B]" />
+                          <p className="text-sm text-[#7a8575]">Memuat preview surat...</p>
+                        </div>
+                      )}
                       {preview.error && (
                         <div className="p-6">
                           <p className="text-sm font-medium text-[#b42318]">{preview.error}</p>
                           <button
                             type="button"
                             onClick={() => setVersiPreview((v) => v + 1)}
-                            className="mt-2 text-sm font-semibold underline hover:text-[#7B9669]"
+                            className="mt-2 text-sm font-semibold text-[#404E3B] underline-offset-2 hover:text-[#7B9669] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B9669]"
                           >
                             Muat ulang preview
                           </button>
@@ -1005,7 +1055,7 @@ export default function FormPengajuan() {
                               : undefined
                           }
                           srcDoc={preview.srcDoc || undefined}
-                          className="w-full rounded-lg border border-[#BAC8B1] bg-white"
+                          className="block w-full bg-white"
                           style={{ minHeight: 600 }}
                           onLoad={(e) => {
                             const doc = e.target.contentDocument;
@@ -1018,68 +1068,82 @@ export default function FormPengajuan() {
                     </div>
 
                     <Field id="ttd" label="Persetujuan" error={errors.ttd}>
-                      <p className="mb-3 text-sm">
-                        Periksa isi surat di atas. Tekan Setujui untuk menandatangani surat dengan QR code.
-                      </p>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {disetujui ? (
-                          <>
-                            <span className="w-fit rounded-lg bg-[#BAC8B1] px-3 py-2 text-sm font-semibold">
-                              ✓ Surat sudah disetujui
-                            </span>
+                      <div className="w-full rounded-xl border border-[#BAC8B1] bg-[#F8F9F6] p-4">
+                        <p className="mb-3 text-sm text-[#5b6b55]">
+                          Periksa isi surat di atas. Tekan Setujui untuk menandatangani surat dengan QR code.
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {disetujui ? (
+                            <>
+                              <span className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-[#BAC8B1] px-3 py-2 text-sm font-semibold text-[#404E3B]">
+                                ✓ Surat sudah disetujui
+                              </span>
+                              <Button
+                                type="button"
+                                onClick={batalSetujui}
+                                className="w-fit border border-[#404E3B] bg-transparent font-bold text-[#404E3B] hover:bg-[#404E3B] hover:text-[#E6E6E6] focus:ring-[#7B9669]"
+                              >
+                                Batal setujui
+                              </Button>
+                            </>
+                          ) : (
                             <Button
                               type="button"
-                              onClick={batalSetujui}
-                              className="w-fit border border-[#404E3B] bg-transparent font-bold text-[#404E3B] hover:bg-[#404E3B] hover:text-[#E6E6E6]"
+                              onClick={setujui}
+                              disabled={menyetujui || preview.loading || !!preview.error}
+                              className="w-fit border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B] focus:ring-[#7B9669] disabled:opacity-50"
                             >
-                              Batal setujui
+                              {menyetujui ? "Memproses..." : "Setujui"}
                             </Button>
-                          </>
-                        ) : (
-                          <Button
-                            type="button"
-                            onClick={setujui}
-                            disabled={menyetujui || preview.loading || !!preview.error}
-                            className="w-fit border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
-                          >
-                            {menyetujui ? "Memproses..." : "Setujui"}
-                          </Button>
-                        )}
+                          )}
+                        </div>
                       </div>
                     </Field>
                   </div>
                 )}
 
+                {/* STEP 3 */}
                 {step === 3 && (
-                  <div>
-                    <Field id="bukti_spp" label="Bukti SPP (PDF / JPG / PNG, maks. 2 MB)" error={errors.bukti_spp}>
+                  <div className="grid w-full gap-x-4">
+                    <Field
+                      id="bukti_spp"
+                      label="Bukti SPP"
+                      error={errors.bukti_spp}
+                      hint="Format PDF / JPG / PNG, maks. 2 MB"
+                    >
                       <FileInput
                         id="bukti_spp" accept=".pdf,.jpg,.jpeg,.png"
-                        onChange={update("bukti_spp")} className="text-[#404E3B]"
+                        onChange={update("bukti_spp")}
+                        className="w-full text-[#404E3B]"
                       />
                     </Field>
                     <Field
                       id="surat_rekomendasi"
-                      label="Surat rekomendasi dari pembimbing akademik (PDF / JPG / PNG, maks. 2 MB)"
+                      label="Surat rekomendasi dari pembimbing akademik"
                       error={errors.surat_rekomendasi}
+                      hint="Format PDF / JPG / PNG, maks. 2 MB"
                     >
                       <FileInput
                         id="surat_rekomendasi" accept=".pdf,.jpg,.jpeg,.png"
-                        onChange={update("surat_rekomendasi")} className="text-[#404E3B]"
+                        onChange={update("surat_rekomendasi")}
+                        className="w-full text-[#404E3B]"
                       />
                     </Field>
                   </div>
                 )}
 
                 {msg && (
-                  <Alert className="mt-4 border border-[#b42318] bg-[#ffd9d3] text-[#7a1f12]">{msg.text}</Alert>
+                  <Alert className="mt-4 rounded-xl border border-[#b42318] bg-[#ffd9d3] text-[#7a1f12]">
+                    {msg.text}
+                  </Alert>
                 )}
 
-                <div className="mt-6 flex items-center justify-between border-t border-[#BAC8B1] pt-5">
+                {/* NAVIGASI */}
+                <div className="mt-8 flex w-full items-center justify-between gap-3 border-t border-[#BAC8B1] pt-5">
                   {step > 0 ? (
                     <Button
                       type="button" onClick={back} disabled={loading}
-                      className="border border-[#7B9669] bg-white font-semibold text-[#404E3B] hover:bg-[#BAC8B1]"
+                      className="border border-[#7B9669] bg-white font-semibold text-[#404E3B] hover:bg-[#BAC8B1] focus:ring-[#7B9669]"
                     >
                       ← Kembali
                     </Button>
@@ -1091,7 +1155,7 @@ export default function FormPengajuan() {
                       type="button" onClick={next} disabled={loading}
                       aria-disabled={belumSetuju}
                       title={belumSetuju ? "Setujui surat terlebih dahulu" : undefined}
-                      className={`border-0 font-bold ${
+                      className={`border-0 font-bold focus:ring-[#7B9669] ${
                         belumSetuju
                           ? "cursor-not-allowed bg-gray-300 text-gray-500 hover:bg-gray-300 hover:text-gray-500"
                           : "bg-[#404E3B] text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
@@ -1102,7 +1166,7 @@ export default function FormPengajuan() {
                   ) : (
                     <Button
                       type="button" onClick={handleSubmit} disabled={loading}
-                      className="border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
+                      className="border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B] focus:ring-[#7B9669] disabled:opacity-50"
                     >
                       {loading ? "Mengirim..." : "Kirim pengajuan"}
                     </Button>
