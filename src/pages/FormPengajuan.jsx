@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Alert, Button, FileInput, Label, Textarea, TextInput } from "flowbite-react";
 
-const API = "http://10.6.74.85:8000/api";
+const API = "http://10.6.74.152:8000/api";
+
 const ENDPOINT = {
   buat: "/pengajuan-magang",
   ubah: (id) => `/pengajuan-magang/${id}`,
@@ -906,6 +907,16 @@ export default function FormPengajuan() {
                     Perbaiki pengajuan
                   </Button>
                 )}
+
+                {aktif.status === "setuju" && !adaBerjalan && (
+                  <Button
+                    type="button"
+                    onClick={mulaiBaru}
+                    className="w-full border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B] focus:ring-[#7B9669] sm:w-auto"
+                  >
+                    Buat pengajuan baru
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -1094,7 +1105,7 @@ export default function FormPengajuan() {
 
                 {/* STEP 3 */}
                 {step === 3 && (
-                  <div className="grid w-full gap-x-4 lg:grid-cols-2">
+                  <div className="grid w-full gap-x-4">
                     <Field
                       id="bukti_spp"
                       label="Bukti SPP"
