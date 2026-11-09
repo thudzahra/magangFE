@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Alert, Button, FileInput, Label, Textarea, TextInput } from "flowbite-react";
 
-
 const API = "http://10.6.74.85:8000/api";
 const ENDPOINT = {
   buat: "/pengajuan-magang", // POST = buat pengajuan, GET = daftar pengajuan milik mahasiswa
