@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 const API = (
   import.meta.env.VITE_API_URL ||
-  "http://10.6.74.152:8000/api"
+  "http://10.6.74.36:8000/api"
 ).replace(/\/+$/, "");
 
 const ENDPOINT = {
@@ -431,12 +431,15 @@ function FilePreview({ berkas }) {
         <img
           src={berkas.preview_url}
           alt={berkas.label}
+          loading="lazy"
+          decoding="async"
           className="max-h-[520px] w-full bg-white object-contain"
         />
       ) : (
         <iframe
           src={`${berkas.preview_url}#toolbar=0&navpanes=0&view=FitH`}
           title={berkas.label}
+          loading="lazy"
           className="h-[640px] w-full"
         />
       )}
