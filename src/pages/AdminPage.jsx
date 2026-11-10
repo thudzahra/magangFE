@@ -823,9 +823,9 @@ export default function AdminPage() {
     opsiDep.length > 0
       ? opsiDep
       : list.map((item) => ({
-          kode: item.departemenKode,
-          nama: item.departemen,
-        }));
+        kode: item.departemenKode,
+        nama: item.departemen,
+      }));
 
   const pilihanDep = [
     ...new Map(
@@ -862,13 +862,12 @@ export default function AdminPage() {
       </header>
 
       <main className="mx-auto w-full max-w-[1680px] flex-1 px-4 py-10 sm:px-6 lg:px-8">
-        <div className="mb-8">
+        <div className="mb-8 flex flex-col items-center text-center">
           <h1 className="text-2xl font-bold sm:text-3xl">
             Dashboard verifikasi admin
           </h1>
-          <p className="mt-2 max-w-2xl text-sm text-[#5b6b55] sm:text-base">
-            Periksa data dan berkas mahasiswa, lalu terbitkan surat pengantar
-            magang.
+          <p className="mx-auto mt-2 max-w-2xl text-sm text-[#5b6b55] sm:text-base">
+            Periksa data dan berkas mahasiswa, lalu terbitkan surat pengantar magang.
           </p>
         </div>
 
@@ -907,20 +906,18 @@ export default function AdminPage() {
                   role="tab"
                   aria-selected={aktif}
                   onClick={() => pilihTab(tab.value)}
-                  className={`-mb-px flex shrink-0 items-center gap-2 whitespace-nowrap border-b-[3px] px-3 py-4 text-sm transition sm:px-1 sm:text-base ${
-                    aktif
+                  className={`-mb-px flex shrink-0 items-center gap-2 whitespace-nowrap border-b-[3px] px-3 py-4 text-sm transition sm:px-1 sm:text-base ${aktif
                       ? "border-[#404E3B] font-semibold text-[#404E3B]"
                       : "border-transparent text-[#5b6b55] opacity-80 hover:opacity-100"
-                  }`}
+                    }`}
                 >
                   {tab.label}
 
                   <span
-                    className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
-                      aktif
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${aktif
                         ? "bg-[#404E3B] text-[#E6E6E6]"
                         : "bg-[#E6E6E6] text-[#404E3B]"
-                    }`}
+                      }`}
                   >
                     {hitung(tab.value)}
                   </span>
@@ -988,9 +985,8 @@ export default function AdminPage() {
                   {KOLOM.map((heading) => (
                     <th
                       key={heading}
-                      className={`px-5 py-3.5 text-xs font-semibold uppercase tracking-wide first:pl-8 last:pr-8 ${
-                        heading === "No." ? "text-center" : ""
-                      }`}
+                      className={`px-5 py-3.5 text-xs font-semibold uppercase tracking-wide first:pl-8 last:pr-8 ${heading === "No." ? "text-center" : ""
+                        }`}
                     >
                       {heading}
                     </th>
@@ -1125,11 +1121,10 @@ export default function AdminPage() {
                         type="button"
                         disabled={loading}
                         onClick={() => setPage(n)}
-                        className={`h-9 min-w-9 rounded-lg border px-2 text-sm font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B9669] ${
-                          n === meta.current_page
+                        className={`h-9 min-w-9 rounded-lg border px-2 text-sm font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B9669] ${n === meta.current_page
                             ? "border-[#404E3B] bg-[#404E3B] text-[#E6E6E6]"
                             : "border-[#BAC8B1] text-[#404E3B] hover:bg-[#BAC8B1]"
-                        }`}
+                          }`}
                       >
                         {n}
                       </button>

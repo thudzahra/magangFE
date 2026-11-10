@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Alert, Button, FileInput, Label, Textarea, TextInput } from "flowbite-react";
 
-const API = "http://10.6.74.152:8000/api";
+const API = "http://10.6.74.36:8000/api";
 const ENDPOINT = {
   buat: "/pengajuan-magang",
   ubah: (id) => `/pengajuan-magang/${id}`,
@@ -370,7 +370,7 @@ function FormRiwayat({ item, memuatDetail }) {
   const berkas = [...berkasServer, ...berkasLokal];
 
   return (
-    <div className="w-full p-5 sm:p-8 lg:p-10">
+    <div className="w-full p-5 sm:p-8">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3 rounded-xl bg-[#F4F6F2] px-4 py-3">
         <div>
           <p className="text-sm font-bold text-[#404E3B]">Pengajuan #{item.id}</p>
@@ -807,9 +807,9 @@ export default function FormPengajuan() {
 
   return (
     <div className="min-h-screen w-full bg-[#E6E6E6] text-[#404E3B] antialiased">
-      {/* HEADER — full width */}
+      {/* HEADER — Full width (tidak ditengah) */}
       <header className="sticky top-0 z-20 w-full border-b border-[#BAC8B1] bg-white/95 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-[1680px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+        <div className="flex w-full items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2.5">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#404E3B] text-sm font-bold text-[#E6E6E6]">
               SM
@@ -826,14 +826,14 @@ export default function FormPengajuan() {
         </div>
       </header>
 
-      {/* MAIN — full width */}
-      <main className="mx-auto w-full max-w-[1680px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+      {/* MAIN — max-w-4xl agar proporsional */}
+      <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 sm:py-10">
         {/* JUDUL */}
-        <div className="mb-8 w-full">
+        <div className="mb-8 w-full text-center">
           <h1 className="text-2xl font-bold sm:text-3xl">
             {tampilRiwayat ? "Riwayat pengajuan" : sedangRevisi ? "Perbaiki pengajuan" : "Formulir pengajuan"}
           </h1>
-          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#5b6b55]">
+          <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-[#5b6b55]">
             {tampilRiwayat
               ? "Pengajuan yang sudah kamu kirim tersimpan di sini beserta statusnya."
               : "Pastikan semua data terisi dengan benar sebelum mengirim."}
@@ -852,7 +852,7 @@ export default function FormPengajuan() {
         {!memuatRiwayat && tampilRiwayat && aktif && (
           <div className="w-full space-y-6">
             {riwayat.length > 1 && (
-              <div className="grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid w-full gap-2 sm:grid-cols-2">
                 {riwayat.map((p) => {
                   const dipilih = String(p.id) === String(pilihId);
 
@@ -880,7 +880,7 @@ export default function FormPengajuan() {
             )}
 
             <div className="w-full overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-black/5">
-              <div className="bg-gradient-to-r from-[#404E3B] to-[#7B9669] px-6 py-6 text-[#E6E6E6] sm:px-8 lg:px-10">
+              <div className="bg-gradient-to-r from-[#404E3B] to-[#7B9669] px-6 py-6 text-[#E6E6E6] sm:px-8">
                 <h2 className="text-lg font-bold sm:text-xl">Formulir pengajuan surat pengantar magang</h2>
                 <p className="mt-1 text-sm text-[#E6E6E6]/80">
                   Data di bawah adalah pengajuan yang sudah dikirim dan tidak dapat diubah.
@@ -889,7 +889,7 @@ export default function FormPengajuan() {
 
               <FormRiwayat key={aktif.id} item={aktif} memuatDetail={memuatDetail} />
 
-              <div className="flex flex-col gap-3 border-t border-[#BAC8B1] bg-[#F8F9F6] px-5 py-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-8 lg:px-10">
+              <div className="flex flex-col gap-3 border-t border-[#BAC8B1] bg-[#F8F9F6] px-5 py-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-8">
                 <p className="text-sm leading-relaxed text-[#5b6b55]">
                   {aktif.status === "revisi" &&
                     "Pengajuan ini perlu diperbaiki. Perbaikan akan memperbarui pengajuan yang sama, bukan membuat yang baru."}
@@ -945,7 +945,7 @@ export default function FormPengajuan() {
             )}
 
             <div key={versiForm} className="w-full overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-black/5">
-              <div className="bg-gradient-to-r from-[#404E3B] to-[#7B9669] px-6 py-6 text-[#E6E6E6] sm:px-8 lg:px-10">
+              <div className="bg-gradient-to-r from-[#404E3B] to-[#7B9669] px-6 py-6 text-[#E6E6E6] sm:px-8">
                 <h2 className="text-lg font-bold sm:text-xl">Formulir pengajuan surat pengantar magang</h2>
                 <p className="mt-1 text-sm text-[#E6E6E6]/80">
                   {sedangRevisi
@@ -954,8 +954,8 @@ export default function FormPengajuan() {
                 </p>
               </div>
 
-              {/* ISI FORM — full width */}
-              <div className="w-full p-5 sm:p-8 lg:p-10">
+              {/* ISI FORM */}
+              <div className="w-full p-5 sm:p-8">
                 <Stepper step={step} />
 
                 {/* STEP 0 */}
@@ -1138,24 +1138,24 @@ export default function FormPengajuan() {
                   </Alert>
                 )}
 
-                {/* NAVIGASI */}
-                <div className="mt-8 flex w-full items-center justify-between gap-3 border-t border-[#BAC8B1] pt-5">
+                {/* NAVIGASI — Responsif */}
+                <div className="mt-8 flex flex-col-reverse gap-3 border-t border-[#BAC8B1] pt-5 sm:flex-row sm:items-center sm:justify-between">
                   {step > 0 ? (
                     <Button
                       type="button" onClick={back} disabled={loading}
-                      className="border border-[#7B9669] bg-white font-semibold text-[#404E3B] hover:bg-[#BAC8B1] focus:ring-[#7B9669]"
+                      className="w-full border border-[#7B9669] bg-white font-semibold text-[#404E3B] hover:bg-[#BAC8B1] focus:ring-[#7B9669] sm:w-auto"
                     >
                       ← Kembali
                     </Button>
                   ) : (
-                    <span />
+                    <span className="hidden sm:block" />
                   )}
                   {step < STEPS.length - 1 ? (
                     <Button
                       type="button" onClick={next} disabled={loading}
                       aria-disabled={belumSetuju}
                       title={belumSetuju ? "Setujui surat terlebih dahulu" : undefined}
-                      className={`border-0 font-bold focus:ring-[#7B9669] ${
+                      className={`w-full border-0 font-bold focus:ring-[#7B9669] sm:w-auto ${
                         belumSetuju
                           ? "cursor-not-allowed bg-gray-300 text-gray-500 hover:bg-gray-300 hover:text-gray-500"
                           : "bg-[#404E3B] text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
@@ -1166,7 +1166,7 @@ export default function FormPengajuan() {
                   ) : (
                     <Button
                       type="button" onClick={handleSubmit} disabled={loading}
-                      className="border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B] focus:ring-[#7B9669] disabled:opacity-50"
+                      className="w-full border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B] focus:ring-[#7B9669] disabled:opacity-50 sm:w-auto"
                     >
                       {loading ? "Mengirim..." : "Kirim pengajuan"}
                     </Button>
