@@ -431,12 +431,15 @@ function FilePreview({ berkas }) {
         <img
           src={berkas.preview_url}
           alt={berkas.label}
+          loading="lazy"
+          decoding="async"
           className="max-h-[520px] w-full bg-white object-contain"
         />
       ) : (
         <iframe
           src={`${berkas.preview_url}#toolbar=0&navpanes=0&view=FitH`}
           title={berkas.label}
+          loading="lazy"
           className="h-[640px] w-full"
         />
       )}
