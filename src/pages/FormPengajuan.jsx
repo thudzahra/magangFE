@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Alert, Button, FileInput, Label, Textarea, TextInput } from "flowbite-react";
 
-const API = "http://10.6.74.152:8000/api";
+const API = "http://10.6.74.36:8000/api";
 const ENDPOINT = {
   buat: "/pengajuan-magang",
   ubah: (id) => `/pengajuan-magang/${id}`,
