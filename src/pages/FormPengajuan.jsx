@@ -8,7 +8,7 @@ import {
   TextInput,
 } from "flowbite-react";
 
-const API = "http://172.18.160.106:8000/api";
+const API = "http://172.18.160.138:8000/api";
 const ENDPOINT = {
   buat: "/pengajuan-magang", // POST = buat pengajuan, GET = daftar pengajuan milik mahasiswa
   ubah: (id) => `/pengajuan-magang/${id}`, // PUT = ubah, GET = detail
@@ -159,18 +159,43 @@ const validasiBerkas = (file, namaBerkas) => {
   return "";
 };
 
+const bentukTempat = (t) => ({
+  instansi: t.instansi.trim(),
+  alamat_instansi: t.alamat_instansi.trim(),
+  tanggal_mulai: t.tanggal_mulai,
+  tanggal_selesai: t.tanggal_selesai,
+});
+
 // Data yang dikirim ke server untuk membuat / memperbarui pengajuan
 const bentukData = (f) => ({
   nama: f.nama.trim(),
   nim: f.nim.trim(),
   departemen: f.departemen,
+
+  // Tempat magang pertama
   instansi: f.instansi.trim(),
   alamat_instansi: f.alamat_instansi.trim(),
   tanggal_mulai: f.tanggal_mulai,
   tanggal_selesai: f.tanggal_selesai,
-  // Anggota kelompok (kosong jika pengajuan individu)
+
+  // Tempat magang kedua: kirim sebagai field terpisah ke Laravel
+  instansi_kedua: f.tempat2?.instansi?.trim() || null,
+  alamat_instansi_kedua: f.tempat2?.alamat_instansi?.trim() || null,
+  tanggal_mulai_kedua: f.tempat2?.tanggal_mulai || null,
+  tanggal_selesai_kedua: f.tempat2?.tanggal_selesai || null,
+
+  // Tetap kirim array untuk kompatibilitas fitur surat
+  tempat_magang: [
+    bentukTempat(f),
+    ...(f.tempat2 ? [bentukTempat(f.tempat2)] : []),
+  ],
+
+  // Anggota kelompok
   anggota: f.kelompok
-    ? f.anggota.map((a) => ({ nama: a.nama.trim(), nim: a.nim.trim() }))
+    ? f.anggota.map((a) => ({
+        nama: a.nama.trim(),
+        nim: a.nim.trim(),
+      }))
     : [],
 });
 
@@ -289,6 +314,18 @@ const normalisasiAnggota = (anggota) =>
         nim: String(a?.nim ?? "").toUpperCase(),
       }))
     : [];
+
+// Tempat magang ke-2 dari server (jika ada)
+const ambilTempat2 = (item = {}) => {
+  const t = Array.isArray(item.tempat_magang) ? item.tempat_magang[1] : null;
+  if (!t) return null;
+  return {
+    instansi: t.instansi ?? t.nama ?? "",
+    alamat_instansi: t.alamat_instansi ?? t.alamat ?? "",
+    tanggal_mulai: String(t.tanggal_mulai || "").slice(0, 10),
+    tanggal_selesai: String(t.tanggal_selesai || "").slice(0, 10),
+  };
+};
 
 const normalisasiRiwayat = (item = {}) => {
   const user = getUser();
@@ -440,6 +477,8 @@ function FormRiwayat({ item, memuatDetail }) {
   const [terbuka, setTerbuka] = useState({});
 
   const anggota = Array.isArray(item.anggota) ? item.anggota : [];
+
+  const tempat2 = ambilTempat2(item);
 
   const berkasServer = item.daftarBerkas.filter(
     (b) => b.jenis !== "surat-magang" || item.status === "setuju",
@@ -604,6 +643,55 @@ function FormRiwayat({ item, memuatDetail }) {
         </Field>
       </div>
 
+      {tempat2 && (
+        <div className="mb-4 rounded-lg border border-[#BAC8B1] p-4">
+          <p className="mb-2 text-sm font-semibold">Tempat magang 2</p>
+          <Field id="r-instansi-2" label="Nama instansi / perusahaan" optional>
+            <TextInput
+              id="r-instansi-2"
+              theme={inputTheme}
+              value={tempat2.instansi || "-"}
+              readOnly
+              color="gray"
+              className="cursor-default"
+            />
+          </Field>
+          <Field id="r-alamat-2" label="Alamat instansi" optional>
+            <Textarea
+              id="r-alamat-2"
+              theme={textareaTheme}
+              rows={3}
+              value={tempat2.alamat_instansi}
+              readOnly
+              color="gray"
+              className="cursor-default"
+            />
+          </Field>
+          <div className="grid gap-x-4 sm:grid-cols-2">
+            <Field id="r-mulai-2" label="Tanggal mulai" optional>
+              <TextInput
+                id="r-mulai-2"
+                theme={inputTheme}
+                value={formatTanggal(tempat2.tanggal_mulai)}
+                readOnly
+                color="gray"
+                className="cursor-default"
+              />
+            </Field>
+            <Field id="r-selesai-2" label="Tanggal selesai" optional>
+              <TextInput
+                id="r-selesai-2"
+                theme={inputTheme}
+                value={formatTanggal(tempat2.tanggal_selesai)}
+                readOnly
+                color="gray"
+                className="cursor-default"
+              />
+            </Field>
+          </div>
+        </div>
+      )}
+
       <div className="mb-2 mt-2 font-semibold">Surat dan berkas</div>
 
       {berkas.length > 0 ? (
@@ -647,12 +735,14 @@ export default function FormPengajuan() {
     alamat_instansi: "",
     tanggal_mulai: "",
     tanggal_selesai: "",
+    tempat2: null,
     bukti_spp: null,
     surat_rekomendasi: null,
   };
 
   const [step, setStep] = useState(0);
   const [form, setForm] = useState(dataAwal);
+  const [tempat2Terbuka, setTempat2Terbuka] = useState(true);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState(null);
@@ -705,7 +795,11 @@ export default function FormPengajuan() {
         // pengajuan sudah ada di server: tempelkan berkas yang baru diunggah agar bisa dilihat
         hasil = hasil.map((p) =>
           String(p.id) === String(lokal.id)
-            ? { ...p, berkasLokal: lokal.berkasLokal }
+            ? {
+                ...p,
+                berkasLokal: lokal.berkasLokal,
+                tempat_magang: p.tempat_magang ?? lokal.tempat_magang,
+              }
             : p,
         );
       } else {
@@ -845,6 +939,43 @@ export default function FormPengajuan() {
     hapusErrorAnggota();
   };
 
+  // ---------- Tempat magang ke-2 ----------
+  const tambahTempat2 = () => {
+    setForm((f) => ({
+      ...f,
+      tempat2: {
+        instansi: "",
+        alamat_instansi: "",
+        tanggal_mulai: "",
+        tanggal_selesai: "",
+      },
+    }));
+    setTempat2Terbuka(true);
+  };
+
+  const hapusTempat2 = () => {
+    setForm((f) => ({ ...f, tempat2: null }));
+    setErrors(({ tempat2, ...sisa }) => sisa);
+  };
+
+  const ubahTempat2 = (field, value) => {
+    let nilai = value;
+    if (field === "instansi") nilai = formatInstansi(value);
+    if (field === "alamat_instansi") nilai = formatSingkatan(value);
+    setForm((f) => ({ ...f, tempat2: { ...f.tempat2, [field]: nilai } }));
+    setErrors((er) => ({ ...er, tempat2: { ...er.tempat2, [field]: "" } }));
+  };
+
+  const rapikanTempat2 = (field) => () =>
+    setForm((f) =>
+      f.tempat2
+        ? {
+            ...f,
+            tempat2: { ...f.tempat2, [field]: rapikanTitik(f.tempat2[field]) },
+          }
+        : f,
+    );
+
   const validate = (s) => {
     const er = {};
     if (s === 0) {
@@ -888,6 +1019,21 @@ export default function FormPengajuan() {
       else if (form.tanggal_mulai && form.tanggal_selesai <= form.tanggal_mulai)
         er.tanggal_selesai =
           "Tanggal selesai tidak boleh sebelum tanggal mulai.";
+
+      if (form.tempat2) {
+        const t = form.tempat2;
+        const e = {};
+        if (!t.instansi.trim()) e.instansi = "Nama instansi wajib diisi.";
+        if (!t.alamat_instansi.trim())
+          e.alamat_instansi = "Alamat instansi wajib diisi.";
+        if (!t.tanggal_mulai) e.tanggal_mulai = "Tanggal mulai wajib diisi.";
+        if (!t.tanggal_selesai)
+          e.tanggal_selesai = "Tanggal selesai wajib diisi.";
+        else if (t.tanggal_mulai && t.tanggal_selesai <= t.tanggal_mulai)
+          e.tanggal_selesai =
+            "Tanggal selesai tidak boleh sebelum tanggal mulai.";
+        if (Object.keys(e).length) er.tempat2 = e;
+      }
     }
     if (s === 2) {
       if (!disetujui) er.ttd = "Tekan tombol Setujui terlebih dahulu.";
@@ -933,6 +1079,7 @@ export default function FormPengajuan() {
   const next = async () => {
     const er = validate(step);
     setErrors(er);
+    if (er.tempat2) setTempat2Terbuka(true);
     if (Object.keys(er).length) return;
 
     setMsg(null);
@@ -1019,6 +1166,7 @@ export default function FormPengajuan() {
         alamat_instansi: form.alamat_instansi,
         tanggal_mulai: form.tanggal_mulai,
         tanggal_selesai: form.tanggal_selesai,
+        tempat_magang: bentukData(form).tempat_magang,
         status: "menunggu_verifikasi",
         dikirim_at: new Date().toISOString(),
         berkasLokal: [
@@ -1077,6 +1225,7 @@ export default function FormPengajuan() {
       alamat_instansi: item.alamat && item.alamat !== "-" ? item.alamat : "",
       tanggal_mulai: String(item.tanggal_mulai || "").slice(0, 10),
       tanggal_selesai: String(item.tanggal_selesai || "").slice(0, 10),
+      tempat2: ambilTempat2(item),
     };
 
     pengajuanId.current = item.id;
@@ -1433,6 +1582,11 @@ export default function FormPengajuan() {
 
                 {step === 1 && (
                   <div>
+                    {form.tempat2 && (
+                      <p className="mb-2 text-sm font-semibold">
+                        Tempat magang 1
+                      </p>
+                    )}
                     <Field
                       id="instansi"
                       label="Nama instansi / perusahaan"
@@ -1494,6 +1648,153 @@ export default function FormPengajuan() {
                         />
                       </Field>
                     </div>
+
+                    {/* Tempat magang ke-2 (opsional) */}
+                    {form.tempat2 ? (
+                      <div className="mb-3 rounded-lg border border-[#BAC8B1]">
+                        <div className="flex items-center gap-2 px-4 py-3">
+                          <button
+                            type="button"
+                            onClick={() => setTempat2Terbuka((t) => !t)}
+                            aria-expanded={tempat2Terbuka}
+                            className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                          >
+                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#404E3B] text-xs font-semibold text-[#E6E6E6]">
+                              2
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <b className="block truncate text-sm">
+                                {form.tempat2.instansi.trim() ||
+                                  "Tempat magang 2"}
+                              </b>
+                              <span className="text-xs opacity-70">
+                                {form.tempat2.tanggal_mulai ||
+                                form.tempat2.tanggal_selesai
+                                  ? `${formatTanggal(form.tempat2.tanggal_mulai)} – ${formatTanggal(form.tempat2.tanggal_selesai)}`
+                                  : "Belum diisi"}
+                              </span>
+                            </span>
+                            <span aria-hidden="true" className="text-xs">
+                              {tempat2Terbuka ? "▲" : "▼"}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={hapusTempat2}
+                            className="text-xs font-semibold text-[#b42318] underline"
+                          >
+                            Hapus
+                          </button>
+                        </div>
+
+                        {tempat2Terbuka && (
+                          <div className="border-t border-[#BAC8B1] p-4">
+                            <Field
+                              id="t2-instansi"
+                              label="Nama instansi / perusahaan"
+                              error={errors.tempat2?.instansi}
+                            >
+                              <TextInput
+                                id="t2-instansi"
+                                theme={inputTheme}
+                                value={form.tempat2.instansi}
+                                onChange={(e) =>
+                                  ubahTempat2("instansi", e.target.value)
+                                }
+                                onBlur={rapikanTempat2("instansi")}
+                                placeholder="cth. PT Maju Bersama"
+                                color={
+                                  errors.tempat2?.instansi ? "failure" : "gray"
+                                }
+                              />
+                            </Field>
+                            <Field
+                              id="t2-alamat"
+                              label="Alamat instansi"
+                              error={errors.tempat2?.alamat_instansi}
+                            >
+                              <Textarea
+                                id="t2-alamat"
+                                theme={textareaTheme}
+                                rows={3}
+                                value={form.tempat2.alamat_instansi}
+                                onChange={(e) =>
+                                  ubahTempat2(
+                                    "alamat_instansi",
+                                    e.target.value,
+                                  )
+                                }
+                                onBlur={rapikanTempat2("alamat_instansi")}
+                                placeholder="Alamat lengkap instansi"
+                                color={
+                                  errors.tempat2?.alamat_instansi
+                                    ? "failure"
+                                    : "gray"
+                                }
+                              />
+                            </Field>
+                            <div className="grid gap-x-4 sm:grid-cols-2">
+                              <Field
+                                id="t2-mulai"
+                                label="Tanggal mulai"
+                                error={errors.tempat2?.tanggal_mulai}
+                              >
+                                <TextInput
+                                  id="t2-mulai"
+                                  theme={inputTheme}
+                                  type="date"
+                                  value={form.tempat2.tanggal_mulai}
+                                  onChange={(e) =>
+                                    ubahTempat2("tanggal_mulai", e.target.value)
+                                  }
+                                  color={
+                                    errors.tempat2?.tanggal_mulai
+                                      ? "failure"
+                                      : "gray"
+                                  }
+                                />
+                              </Field>
+                              <Field
+                                id="t2-selesai"
+                                label="Tanggal selesai"
+                                error={errors.tempat2?.tanggal_selesai}
+                              >
+                                <TextInput
+                                  id="t2-selesai"
+                                  theme={inputTheme}
+                                  type="date"
+                                  value={form.tempat2.tanggal_selesai}
+                                  onChange={(e) =>
+                                    ubahTempat2(
+                                      "tanggal_selesai",
+                                      e.target.value,
+                                    )
+                                  }
+                                  color={
+                                    errors.tempat2?.tanggal_selesai
+                                      ? "failure"
+                                      : "gray"
+                                  }
+                                />
+                              </Field>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={tambahTempat2}
+                        className="w-full rounded-lg border border-dashed border-[#7B9669] py-2 text-sm font-semibold text-[#404E3B] transition hover:bg-[#BAC8B1]"
+                      >
+                        + Tambah tempat magang
+                      </button>
+                    )}
+                    {form.tempat2 && (
+                      <p className="text-center text-xs opacity-70">
+                        Maksimal 2 tempat magang.
+                      </p>
+                    )}
                   </div>
                 )}
 

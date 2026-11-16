@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 const API = (
   import.meta.env.VITE_API_URL ||
-  "http://172.18.160.106:8000/api"
+  "http://172.18.160.138:8000/api"
 ).replace(/\/+$/, "");
 
 const ENDPOINT = {
@@ -185,6 +185,35 @@ function ambilBerkas(item) {
     .filter(Boolean);
 }
 
+// Tempat magang ke-2 dari server (jika ada)
+function ambilTempat2(item = {}) {
+  // Prioritaskan field langsung dari API.
+  const instansi =
+    item.instansi_kedua ??
+    item.tempat_magang?.[1]?.instansi ??
+    item.tempat_magang?.[1]?.nama ??
+    "";
+
+  if (!instansi) return null;
+
+  return {
+    instansi,
+    alamat_instansi:
+      item.alamat_instansi_kedua ??
+      item.tempat_magang?.[1]?.alamat_instansi ??
+      item.tempat_magang?.[1]?.alamat ??
+      "",
+    tanggal_mulai:
+      item.tanggal_mulai_kedua ??
+      item.tempat_magang?.[1]?.tanggal_mulai ??
+      "",
+    tanggal_selesai:
+      item.tanggal_selesai_kedua ??
+      item.tempat_magang?.[1]?.tanggal_selesai ??
+      "",
+  };
+}
+
 function normalisasiPengajuan(item = {}) {
   const mhs = item.mahasiswa ?? {};
   const dep = bentukDepartemen(mhs.departemen ?? item.departemen);
@@ -201,6 +230,7 @@ function normalisasiPengajuan(item = {}) {
         : item.status ?? "menunggu_verifikasi",
     no_registrasi: item.nomor_surat ?? item.no_registrasi ?? "-",
     alamat: item.alamat_instansi ?? item.alamat ?? "-",
+    tempat2: ambilTempat2(item),
     daftarBerkas: ambilBerkas(item),
   };
 }
@@ -544,6 +574,23 @@ function DetailModal({ item, onClose, onUpdated }) {
               label="Pelaksanaan"
               value={`${formatTanggal(item.tanggal_mulai)} s.d. ${formatTanggal(item.tanggal_selesai)}`}
             />
+
+            {item.tempat2 && (
+              <>
+                <Field
+                  label="Perusahaan tujuan 2"
+                  value={item.tempat2.instansi}
+                />
+                <Field
+                  label="Alamat perusahaan 2"
+                  value={item.tempat2.alamat_instansi}
+                />
+                <Field
+                  label="Pelaksanaan 2"
+                  value={`${formatTanggal(item.tempat2.tanggal_mulai)} s.d. ${formatTanggal(item.tempat2.tanggal_selesai)}`}
+                />
+              </>
+            )}
           </div>
 
           {status === "ditolak" && item.catatan_revisi && (
