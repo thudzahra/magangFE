@@ -1,15 +1,20 @@
 import { useEffect, useState } from "react";
 const API = (
   import.meta.env.VITE_API_URL ||
-  "http://172.18.160.106:8000/api"
+  "http://172.18.160.138:8000/api"
 ).replace(/\/+$/, "");
 
 const ENDPOINT = {
   daftar: "/admin/pengajuan-magang",
   ringkasan: "/admin/pengajuan-magang/ringkasan",
   detail: (id) => `/admin/pengajuan-magang/${id}`,
+  // Endpoint edit data (PengajuanMagangController@update).
+  // Kalau di routes/api.php kamu pakai Route::put, ganti METHOD_EDIT jadi "PUT".
+  edit: (id) => `/admin/pengajuan-magang/${id}`,
   status: (id) => `/admin/pengajuan-magang/${id}/status`,
 };
+
+const METHOD_EDIT = "PATCH";
 
 const PER_PAGE = 20;
 
@@ -51,7 +56,8 @@ async function panggilApi(endpoint, { method = "GET", body } = {}) {
 
     if (response.status === 403) {
       throw new Error(
-        "Akses ditolak. Pastikan akun memiliki role admin_kpap."
+        data.message ||
+          "Akses ditolak. Pastikan akun memiliki role admin_kpap."
       );
     }
 
@@ -86,6 +92,13 @@ function formatTanggal(value) {
     month: "long",
     year: "numeric",
   }).format(date);
+}
+
+// Ubah nilai tanggal dari API (bisa "2026-11-12" atau ISO datetime)
+// menjadi "YYYY-MM-DD" untuk <input type="date">.
+function tanggalUntukInput(value) {
+  if (!value) return "";
+  return String(value).slice(0, 10);
 }
 
 function daftarHalaman(sekarang, terakhir) {
@@ -128,7 +141,6 @@ function bentukDepartemen(dep) {
 
   return { kode: String(dep), nama: namaDepartemen(String(dep)) };
 }
-
 
 const LABEL_BERKAS = {
   "surat-pengajuan": "Surat pengajuan magang",
@@ -262,12 +274,7 @@ function urutanNomor(item) {
 }
 
 function urutkanPengajuan(a, b) {
-  const na = urutanNomor(a);
-  const nb = urutanNomor(b);
-
-  if (na !== nb) return na < nb ? -1 : 1;
-
-  return (Number(a.id) || 0) - (Number(b.id) || 0);
+  return (Number(b.id) || 0) - (Number(a.id) || 0);
 }
 
 const STATUS = {
@@ -341,6 +348,18 @@ function Field({ label, value, children }) {
         </b>
       )}
     </div>
+  );
+}
+
+const INPUT_CLASS =
+  "w-full rounded-md border border-[#BAC8B1] bg-white px-2 py-1.5 font-semibold text-[#404E3B] outline-none focus:ring-2 focus:ring-[#BAC8B1]";
+
+function EditField({ label, children }) {
+  return (
+    <label className="flex min-w-0 flex-col gap-1 rounded-lg border border-[#404E3B] bg-white px-4 py-2 text-sm">
+      <span className="opacity-70">{label}</span>
+      {children}
+    </label>
   );
 }
 
@@ -448,21 +467,150 @@ function FilePreview({ berkas }) {
 }
 
 // =====================================================
-// MODAL DETAIL DAN VERIFIKASI
+// MODAL DETAIL, EDIT, DAN VERIFIKASI
 // =====================================================
 
-function DetailModal({ item, onClose, onUpdated }) {
+const DEPARTEMEN_DARI_NIM = {
+  E141: "MNH",
+  E241: "THH",
+  E341: "KSHE",
+  E441: "SVK",
+};
+
+function formAwal(item) {
+  return {
+    nama: item.nama === "-" ? "" : item.nama ?? "",
+    nim: item.nim === "-" ? "" : item.nim ?? "",
+    departemen: item.departemenKode === "-" ? "" : item.departemenKode ?? "",
+    instansi: item.instansi ?? "",
+    alamat_instansi:
+      item.alamat_instansi ?? (item.alamat === "-" ? "" : item.alamat ?? ""),
+    tanggal_mulai: tanggalUntukInput(item.tanggal_mulai),
+    tanggal_selesai: tanggalUntukInput(item.tanggal_selesai),
+  };
+}
+
+function DetailModal({ item, onClose, onUpdated, opsiDepartemen = [] }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [sukses, setSukses] = useState("");
+
+  const [form, setForm] = useState(() => formAwal(item));
 
   const status = normalisasiStatus(item.status);
   const verified = status === "terverifikasi";
+  // Data bisa langsung diubah selama belum disetujui.
+  const edit = status === "menunggu" || status === "ditolak";
   const nomorSurat = nomorSuratTampil(item);
   const suratMagang = item.daftarBerkas.find((b) => b.jenis === "surat-magang");
+
+  const awal = formAwal(item);
+  const berubah = edit && Object.keys(awal).some((k) => awal[k] !== form[k]);
+
+  function resetForm() {
+    setError("");
+    setSukses("");
+    setForm(formAwal(item));
+  }
+
+  const ubah = (key) => (e) =>
+    setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  // NIM huruf besar, maksimal 11 karakter; departemen ikut berubah sesuai awalan NIM.
+  const ubahNim = (e) => {
+    const nim = e.target.value.toUpperCase().replace(/\s/g, "").slice(0, 11);
+    const kode = DEPARTEMEN_DARI_NIM[nim.slice(0, 4)];
+
+    setForm((f) => ({ ...f, nim, ...(kode ? { departemen: kode } : {}) }));
+  };
+
+  const pilihanDepartemen = [
+    ...new Map(
+      [
+        ...opsiDepartemen,
+        ...Object.entries(NAMA_DEPARTEMEN).map(([kode, nama]) => ({
+          kode,
+          nama,
+        })),
+        form.departemen
+          ? { kode: form.departemen, nama: namaDepartemen(form.departemen) }
+          : null,
+      ]
+        .filter(Boolean)
+        .map((d) => [d.kode, d])
+    ).values(),
+  ].sort((a, b) => a.nama.localeCompare(b.nama, "id"));
+
+  async function simpanEdit() {
+    setError("");
+    setSukses("");
+
+    const nama = form.nama.trim();
+    const nim = form.nim.trim();
+    const instansi = form.instansi.trim();
+    const alamat = form.alamat_instansi.trim();
+
+    if (!nama || !nim || !form.departemen) {
+      setError("Nama, NIM, dan departemen wajib diisi.");
+      return;
+    }
+
+    if (!instansi || !alamat) {
+      setError("Perusahaan tujuan dan alamat wajib diisi.");
+      return;
+    }
+
+    if (!form.tanggal_mulai || !form.tanggal_selesai) {
+      setError("Tanggal mulai dan tanggal selesai wajib diisi.");
+      return;
+    }
+
+    if (form.tanggal_selesai < form.tanggal_mulai) {
+      setError("Tanggal selesai tidak boleh sebelum tanggal mulai.");
+      return;
+    }
+
+    setBusy(true);
+
+    try {
+      const response = await panggilApi(ENDPOINT.edit(item.id), {
+        method: METHOD_EDIT,
+        body: {
+          nama,
+          nim,
+          departemen: form.departemen,
+          instansi,
+          alamat_instansi: alamat,
+          tanggal_mulai: form.tanggal_mulai,
+          tanggal_selesai: form.tanggal_selesai,
+        },
+      });
+
+      const updated = unwrap(response);
+      const pengajuan = updated?.pengajuan ?? updated;
+
+      if (!pengajuan || pengajuan.id == null) {
+        throw new Error(
+          "Data tersimpan, tetapi respons pengajuan tidak dikenali. Muat ulang halaman untuk memeriksa data."
+        );
+      }
+
+      const baru = normalisasiPengajuan(pengajuan);
+
+      onUpdated(baru);
+      setForm(formAwal({ ...item, ...baru }));
+      setSukses(response?.message || "Data pengajuan berhasil diperbarui.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function kirimStatus(body) {
     setBusy(true);
     setError("");
+    setSukses("");
 
     try {
       const response = await panggilApi(ENDPOINT.status(item.id), {
@@ -534,17 +682,112 @@ function DetailModal({ item, onClose, onUpdated }) {
               <StatusBadge status={item.status} />
             </Field>
 
-            <Field label="Nama" value={item.nama} />
-            <Field label="NIM" value={item.nim} />
-            <Field label="Departemen" value={item.departemen} />
-            <Field label="Perusahaan tujuan" value={item.instansi} />
-            <Field label="Alamat perusahaan" value={item.alamat} />
+            {edit ? (
+              <>
+                <EditField label="Nama">
+                  <input
+                    className={INPUT_CLASS}
+                    value={form.nama}
+                    onChange={ubah("nama")}
+                    disabled={busy}
+                  />
+                </EditField>
 
-            <Field
-              label="Pelaksanaan"
-              value={`${formatTanggal(item.tanggal_mulai)} s.d. ${formatTanggal(item.tanggal_selesai)}`}
-            />
+                <EditField label="NIM">
+                  <input
+                    className={INPUT_CLASS}
+                    value={form.nim}
+                    onChange={ubahNim}
+                    maxLength={11}
+                    disabled={busy}
+                  />
+                </EditField>
+
+                <EditField label="Departemen">
+                  <select
+                    className={INPUT_CLASS}
+                    value={form.departemen}
+                    onChange={ubah("departemen")}
+                    disabled={busy}
+                  >
+                    <option value="">Pilih departemen</option>
+                    {pilihanDepartemen.map((dep) => (
+                      <option key={dep.kode} value={dep.kode}>
+                        {dep.nama}
+                      </option>
+                    ))}
+                  </select>
+                </EditField>
+              </>
+            ) : (
+              <>
+                <Field label="Nama" value={item.nama} />
+                <Field label="NIM" value={item.nim} />
+                <Field label="Departemen" value={item.departemen} />
+              </>
+            )}
+
+            {edit ? (
+              <>
+                <EditField label="Perusahaan tujuan">
+                  <input
+                    className={INPUT_CLASS}
+                    value={form.instansi}
+                    onChange={ubah("instansi")}
+                    disabled={busy}
+                  />
+                </EditField>
+
+                <EditField label="Alamat perusahaan">
+                  <input
+                    className={INPUT_CLASS}
+                    value={form.alamat_instansi}
+                    onChange={ubah("alamat_instansi")}
+                    disabled={busy}
+                  />
+                </EditField>
+
+                <EditField label="Tanggal mulai">
+                  <input
+                    type="date"
+                    className={INPUT_CLASS}
+                    value={form.tanggal_mulai}
+                    onChange={ubah("tanggal_mulai")}
+                    disabled={busy}
+                  />
+                </EditField>
+
+                <EditField label="Tanggal selesai">
+                  <input
+                    type="date"
+                    className={INPUT_CLASS}
+                    value={form.tanggal_selesai}
+                    min={form.tanggal_mulai || undefined}
+                    onChange={ubah("tanggal_selesai")}
+                    disabled={busy}
+                  />
+                </EditField>
+              </>
+            ) : (
+              <>
+                <Field label="Perusahaan tujuan" value={item.instansi} />
+                <Field label="Alamat perusahaan" value={item.alamat} />
+
+                <Field
+                  label="Pelaksanaan"
+                  value={`${formatTanggal(item.tanggal_mulai)} s.d. ${formatTanggal(item.tanggal_selesai)}`}
+                />
+              </>
+            )}
           </div>
+
+          {edit && (
+            <p className="text-xs text-[#5b6b55]">
+              Perubahan nama, NIM, dan departemen juga mengubah data akun
+              mahasiswa. Surat pengantar dibuat dari data terbaru saat
+              pengajuan diverifikasi.
+            </p>
+          )}
 
           {status === "ditolak" && item.catatan_revisi && (
             <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800">
@@ -565,6 +808,15 @@ function DetailModal({ item, onClose, onUpdated }) {
 
           {verified && suratMagang && <FilePreview berkas={suratMagang} />}
 
+          {sukses && (
+            <div
+              role="status"
+              className="rounded-lg bg-[#D9F2D9] p-3 text-sm font-semibold text-[#1F6B2E]"
+            >
+              {sukses}
+            </div>
+          )}
+
           {error && (
             <div
               role="alert"
@@ -575,14 +827,40 @@ function DetailModal({ item, onClose, onUpdated }) {
           )}
         </div>
 
-        <div className="flex flex-wrap justify-end gap-2 border-t border-[#BAC8B1] bg-white px-6 py-4">
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[#BAC8B1] bg-white px-6 py-4">
+          {berubah && (
+            <span className="mr-auto text-xs font-semibold text-[#8A5A00]">
+              Ada perubahan yang belum disimpan. Simpan dulu sebelum verifikasi.
+            </span>
+          )}
+
+          {edit && (
+            <>
+              <Button disabled={busy || !berubah} onClick={resetForm}>
+                Reset
+              </Button>
+
+              <Button
+                variant="primary"
+                disabled={busy || !berubah}
+                onClick={simpanEdit}
+              >
+                {busy ? "Menyimpan..." : "Simpan perubahan"}
+              </Button>
+            </>
+          )}
+
           {status === "menunggu" && (
             <>
-              <Button variant="danger" disabled={busy} onClick={tolak}>
+              <Button variant="danger" disabled={busy || berubah} onClick={tolak}>
                 Tolak / minta revisi
               </Button>
 
-              <Button variant="primary" disabled={busy} onClick={verifikasi}>
+              <Button
+                variant="primary"
+                disabled={busy || berubah}
+                onClick={verifikasi}
+              >
                 {busy ? "Memproses..." : "Verifikasi pengajuan"}
               </Button>
             </>
@@ -823,9 +1101,9 @@ export default function AdminPage() {
     opsiDep.length > 0
       ? opsiDep
       : list.map((item) => ({
-        kode: item.departemenKode,
-        nama: item.departemen,
-      }));
+          kode: item.departemenKode,
+          nama: item.departemen,
+        }));
 
   const pilihanDep = [
     ...new Map(
@@ -906,18 +1184,20 @@ export default function AdminPage() {
                   role="tab"
                   aria-selected={aktif}
                   onClick={() => pilihTab(tab.value)}
-                  className={`-mb-px flex shrink-0 items-center gap-2 whitespace-nowrap border-b-[3px] px-3 py-4 text-sm transition sm:px-1 sm:text-base ${aktif
+                  className={`-mb-px flex shrink-0 items-center gap-2 whitespace-nowrap border-b-[3px] px-3 py-4 text-sm transition sm:px-1 sm:text-base ${
+                    aktif
                       ? "border-[#404E3B] font-semibold text-[#404E3B]"
                       : "border-transparent text-[#5b6b55] opacity-80 hover:opacity-100"
-                    }`}
+                  }`}
                 >
                   {tab.label}
 
                   <span
-                    className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${aktif
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                      aktif
                         ? "bg-[#404E3B] text-[#E6E6E6]"
                         : "bg-[#E6E6E6] text-[#404E3B]"
-                      }`}
+                    }`}
                   >
                     {hitung(tab.value)}
                   </span>
@@ -985,8 +1265,9 @@ export default function AdminPage() {
                   {KOLOM.map((heading) => (
                     <th
                       key={heading}
-                      className={`px-5 py-3.5 text-xs font-semibold uppercase tracking-wide first:pl-8 last:pr-8 ${heading === "No." ? "text-center" : ""
-                        }`}
+                      className={`px-5 py-3.5 text-xs font-semibold uppercase tracking-wide first:pl-8 last:pr-8 ${
+                        heading === "No." ? "text-center" : ""
+                      }`}
                     >
                       {heading}
                     </th>
@@ -1121,10 +1402,11 @@ export default function AdminPage() {
                         type="button"
                         disabled={loading}
                         onClick={() => setPage(n)}
-                        className={`h-9 min-w-9 rounded-lg border px-2 text-sm font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B9669] ${n === meta.current_page
+                        className={`h-9 min-w-9 rounded-lg border px-2 text-sm font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B9669] ${
+                          n === meta.current_page
                             ? "border-[#404E3B] bg-[#404E3B] text-[#E6E6E6]"
                             : "border-[#BAC8B1] text-[#404E3B] hover:bg-[#BAC8B1]"
-                          }`}
+                        }`}
                       >
                         {n}
                       </button>
@@ -1156,6 +1438,7 @@ export default function AdminPage() {
         <DetailModal
           key={selected.id}
           item={selected}
+          opsiDepartemen={pilihanDep}
           onClose={() => setSelected(null)}
           onUpdated={handleUpdated}
         />

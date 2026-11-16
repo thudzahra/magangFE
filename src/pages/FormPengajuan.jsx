@@ -8,7 +8,7 @@ import {
   TextInput,
 } from "flowbite-react";
 
-const API = "http://172.18.160.106:8000/api";
+const API = "http://172.18.160.138:8000/api";
 const ENDPOINT = {
   buat: "/pengajuan-magang", // POST = buat pengajuan, GET = daftar pengajuan milik mahasiswa
   ubah: (id) => `/pengajuan-magang/${id}`, // PUT = ubah, GET = detail
