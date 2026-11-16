@@ -5,7 +5,7 @@ const API = (
 ).replace(/\/+$/, "");
 
 const ENDPOINT = {
-  daftar: "/admin/pengajuan-magang",
+  daftar: "/admin/pengajuan-magangz",
   ringkasan: "/admin/pengajuan-magang/ringkasan",
   detail: (id) => `/admin/pengajuan-magang/${id}`,
   status: (id) => `/admin/pengajuan-magang/${id}/status`,
