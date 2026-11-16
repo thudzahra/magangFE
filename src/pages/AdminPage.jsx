@@ -530,6 +530,11 @@ function formAwal(item) {
       item.alamat_instansi ?? (item.alamat === "-" ? "" : item.alamat ?? ""),
     tanggal_mulai: tanggalUntukInput(item.tanggal_mulai),
     tanggal_selesai: tanggalUntukInput(item.tanggal_selesai),
+    // Instansi kedua (kosong bila pengajuan hanya punya satu instansi)
+    instansi2: item.tempat2?.instansi ?? "",
+    alamat_instansi2: item.tempat2?.alamat_instansi ?? "",
+    tanggal_mulai2: tanggalUntukInput(item.tempat2?.tanggal_mulai),
+    tanggal_selesai2: tanggalUntukInput(item.tempat2?.tanggal_selesai),
   };
 }
 
@@ -616,6 +621,23 @@ function DetailModal({ item, onClose, onUpdated, opsiDepartemen = [] }) {
       return;
     }
 
+    if (item.tempat2) {
+      if (!form.instansi2.trim() || !form.alamat_instansi2.trim()) {
+        setError("Perusahaan tujuan 2 dan alamatnya wajib diisi.");
+        return;
+      }
+
+      if (!form.tanggal_mulai2 || !form.tanggal_selesai2) {
+        setError("Tanggal mulai dan selesai perusahaan 2 wajib diisi.");
+        return;
+      }
+
+      if (form.tanggal_selesai2 < form.tanggal_mulai2) {
+        setError("Tanggal selesai perusahaan 2 tidak boleh sebelum tanggal mulainya.");
+        return;
+      }
+    }
+
     setBusy(true);
 
     try {
@@ -629,6 +651,14 @@ function DetailModal({ item, onClose, onUpdated, opsiDepartemen = [] }) {
           alamat_instansi: alamat,
           tanggal_mulai: form.tanggal_mulai,
           tanggal_selesai: form.tanggal_selesai,
+          ...(item.tempat2
+            ? {
+                instansi_kedua: form.instansi2.trim(),
+                alamat_instansi_kedua: form.alamat_instansi2.trim(),
+                tanggal_mulai_kedua: form.tanggal_mulai2,
+                tanggal_selesai_kedua: form.tanggal_selesai2,
+              }
+            : {}),
         },
       });
 
@@ -826,22 +856,64 @@ function DetailModal({ item, onClose, onUpdated, opsiDepartemen = [] }) {
               </>
             )}
 
-            {item.tempat2 && (
-              <>
-                <Field
-                  label="Perusahaan tujuan 2"
-                  value={item.tempat2.instansi}
-                />
-                <Field
-                  label="Alamat perusahaan 2"
-                  value={item.tempat2.alamat_instansi}
-                />
-                <Field
-                  label="Pelaksanaan 2"
-                  value={`${formatTanggal(item.tempat2.tanggal_mulai)} s.d. ${formatTanggal(item.tempat2.tanggal_selesai)}`}
-                />
-              </>
-            )}
+            {item.tempat2 &&
+              (edit ? (
+                <>
+                  <EditField label="Perusahaan tujuan 2">
+                    <input
+                      className={INPUT_CLASS}
+                      value={form.instansi2}
+                      onChange={ubah("instansi2")}
+                      disabled={busy}
+                    />
+                  </EditField>
+
+                  <EditField label="Alamat perusahaan 2">
+                    <input
+                      className={INPUT_CLASS}
+                      value={form.alamat_instansi2}
+                      onChange={ubah("alamat_instansi2")}
+                      disabled={busy}
+                    />
+                  </EditField>
+
+                  <EditField label="Tanggal mulai 2">
+                    <input
+                      type="date"
+                      className={INPUT_CLASS}
+                      value={form.tanggal_mulai2}
+                      onChange={ubah("tanggal_mulai2")}
+                      disabled={busy}
+                    />
+                  </EditField>
+
+                  <EditField label="Tanggal selesai 2">
+                    <input
+                      type="date"
+                      className={INPUT_CLASS}
+                      value={form.tanggal_selesai2}
+                      min={form.tanggal_mulai2 || undefined}
+                      onChange={ubah("tanggal_selesai2")}
+                      disabled={busy}
+                    />
+                  </EditField>
+                </>
+              ) : (
+                <>
+                  <Field
+                    label="Perusahaan tujuan 2"
+                    value={item.tempat2.instansi}
+                  />
+                  <Field
+                    label="Alamat perusahaan 2"
+                    value={item.tempat2.alamat_instansi}
+                  />
+                  <Field
+                    label="Pelaksanaan 2"
+                    value={`${formatTanggal(item.tempat2.tanggal_mulai)} s.d. ${formatTanggal(item.tempat2.tanggal_selesai)}`}
+                  />
+                </>
+              ))}
           </div>
 
           {edit && (
