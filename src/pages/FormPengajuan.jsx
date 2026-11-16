@@ -429,7 +429,7 @@ function BerkasBaris({ berkas, terbuka, onToggle }) {
 
         <span className="flex flex-wrap gap-4">
           <button type="button" onClick={onToggle} className="underline">
-            {terbuka ? "Sembunyikan preview" : "Lihat preview"}
+            {terbuka ? "Sembunyikan Surat" : "Preview Surat"}
           </button>
 
           <a

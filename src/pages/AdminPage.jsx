@@ -456,17 +456,34 @@ function BerkasKosong({ label }) {
   );
 }
 
-function FilePreview({ berkas }) {
+// Preview berkas tertutup secara default; admin klik "Lihat preview" untuk membukanya.
+// Prop `bukaAwal` (opsional) membuat preview langsung terbuka.
+function FilePreview({ berkas, bukaAwal = false }) {
+  const [terbuka, setTerbuka] = useState(bukaAwal);
+
   const gambar = ["jpg", "jpeg", "png", "gif", "webp"].includes(
     berkas.ekstensi
   );
 
   return (
     <div className="overflow-hidden rounded-xl border border-[#BAC8B1] bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#BAC8B1] px-4 py-3 text-sm">
+      <div
+        className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm ${
+          terbuka ? "border-b border-[#BAC8B1]" : ""
+        }`}
+      >
         <strong>{berkas.label}</strong>
 
         <span className="flex flex-wrap items-center gap-4 text-xs font-medium">
+          <button
+            type="button"
+            onClick={() => setTerbuka((t) => !t)}
+            aria-expanded={terbuka}
+            className="underline-offset-2 hover:underline"
+          >
+            {terbuka ? "Sembunyikan Surat" : "Preview Surat"}
+          </button>
+
           <a
             href={berkas.preview_url}
             target="_blank"
@@ -489,22 +506,23 @@ function FilePreview({ berkas }) {
         </span>
       </div>
 
-      {gambar ? (
-        <img
-          src={berkas.preview_url}
-          alt={berkas.label}
-          loading="lazy"
-          decoding="async"
-          className="max-h-[520px] w-full bg-white object-contain"
-        />
-      ) : (
-        <iframe
-          src={`${berkas.preview_url}#toolbar=0&navpanes=0&view=FitH`}
-          title={berkas.label}
-          loading="lazy"
-          className="h-[640px] w-full"
-        />
-      )}
+      {terbuka &&
+        (gambar ? (
+          <img
+            src={berkas.preview_url}
+            alt={berkas.label}
+            loading="lazy"
+            decoding="async"
+            className="max-h-[520px] w-full bg-white object-contain"
+          />
+        ) : (
+          <iframe
+            src={`${berkas.preview_url}#toolbar=0&navpanes=0&view=FitH`}
+            title={berkas.label}
+            loading="lazy"
+            className="h-[640px] w-full"
+          />
+        ))}
     </div>
   );
 }
