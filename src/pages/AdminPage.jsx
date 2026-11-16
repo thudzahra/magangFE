@@ -144,18 +144,31 @@ function bentukDepartemen(dep) {
 
 const LABEL_BERKAS = {
   "surat-pengajuan": "Surat pengajuan magang",
+  "surat-pengajuan-kedua": "Surat pengajuan magang (Instansi 2)",
   "bukti-spp": "Bukti pembayaran SPP",
   "surat-rekomendasi": "Surat rekomendasi",
   "surat-magang": "Surat pengantar magang",
+  "surat-magang-kedua": "Surat pengantar magang (Instansi 2)",
 };
 
-const BERKAS_WAJIB = ["surat-pengajuan", "bukti-spp", "surat-rekomendasi"];
+// Urutan tampil berkas di modal. Surat pengajuan 1 dan 2 berdekatan.
+// "surat-pengajuan-kedua" hanya tampil bila pengajuannya punya instansi kedua.
+const URUTAN_BERKAS = [
+  "surat-pengajuan",
+  "surat-pengajuan-kedua",
+  "bukti-spp",
+  "surat-rekomendasi",
+];
+
+const BERKAS_OPSIONAL = ["surat-pengajuan-kedua"];
 
 const FIELD_LAMA = {
   "surat-pengajuan": "surat_pengajuan_url",
+  "surat-pengajuan-kedua": "surat_pengajuan_kedua_url",
   "bukti-spp": "bukti_spp_url",
   "surat-rekomendasi": "surat_rekomendasi_url",
   "surat-magang": "surat_magang_url",
+  "surat-magang-kedua": "surat_magang_kedua_url",
 };
 
 function ekstensiDari(url = "") {
@@ -533,6 +546,9 @@ function DetailModal({ item, onClose, onUpdated, opsiDepartemen = [] }) {
   const edit = status === "menunggu" || status === "ditolak";
   const nomorSurat = nomorSuratTampil(item);
   const suratMagang = item.daftarBerkas.find((b) => b.jenis === "surat-magang");
+  const suratMagang2 = item.daftarBerkas.find(
+    (b) => b.jenis === "surat-magang-kedua"
+  );
 
   const awal = formAwal(item);
   const berubah = edit && Object.keys(awal).some((k) => awal[k] !== form[k]);
@@ -843,17 +859,18 @@ function DetailModal({ item, onClose, onUpdated, opsiDepartemen = [] }) {
             </div>
           )}
 
-          {BERKAS_WAJIB.map((jenis) => {
+          {URUTAN_BERKAS.map((jenis) => {
             const berkas = item.daftarBerkas.find((b) => b.jenis === jenis);
 
-            return berkas ? (
-              <FilePreview key={jenis} berkas={berkas} />
-            ) : (
-              <BerkasKosong key={jenis} label={LABEL_BERKAS[jenis]} />
-            );
+            if (berkas) return <FilePreview key={jenis} berkas={berkas} />;
+            if (BERKAS_OPSIONAL.includes(jenis)) return null;
+
+            return <BerkasKosong key={jenis} label={LABEL_BERKAS[jenis]} />;
           })}
 
           {verified && suratMagang && <FilePreview berkas={suratMagang} />}
+
+          {verified && suratMagang2 && <FilePreview berkas={suratMagang2} />}
 
           {sukses && (
             <div
