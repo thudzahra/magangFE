@@ -12,7 +12,8 @@ const API = "http://172.18.160.149:8000/api";
 const ENDPOINT = {
   buat: "/pengajuan-magang", // POST = buat pengajuan, GET = daftar pengajuan milik mahasiswa
   ubah: (id) => `/pengajuan-magang/${id}`, // PUT = ubah, GET = detail
-  preview: (id) => `/pengajuan-magang/${id}/preview-surat`,
+  preview: (id, urutan = 1) =>
+    `/pengajuan-magang/${id}/preview-surat?urutan=${urutan}`,
   tandaTangan: (id) => `/pengajuan-magang/${id}/tanda-tangan`,
   kirim: (id) => `/pengajuan-magang/${id}/kirim`,
 };
@@ -75,10 +76,10 @@ const formatSingkatan = (teks) =>
   });
 
 // Nama instansi: PT / CV / UD / PD ditulis tanpa titik
-// "pt.thudzahra" -> "PT Thudzahra", "PT. Maju" -> "PT Maju"
+// "pt.thudzahra" -> "PT Thudzahra", "PT. Maju" -> "PT Maju", "PT . Mayora" -> "PT Mayora"
 const formatInstansi = (teks) => {
   const tanpaTitik = teks.replace(
-    /(^|\s)(pt|cv|ud|pd)\.\s*/gi,
+    /(^|\s)(pt|cv|ud|pd)\s*\.\s*/gi,
     (_, awal, singkatan) => `${awal}${singkatan.toUpperCase()} `,
   );
   return formatSingkatan(tanpaTitik);
@@ -123,8 +124,8 @@ const panggilApi = async (path, { json, formData, method = "POST" } = {}) => {
   return data;
 };
 
-const ambilPreview = async (id) => {
-  const response = await fetch(`${API}${ENDPOINT.preview(id)}`, {
+const ambilPreview = async (id, urutan = 1) => {
+  const response = await fetch(`${API}${ENDPOINT.preview(id, urutan)}`, {
     headers: authHeaders(),
   });
   const type = response.headers.get("content-type") || "";
@@ -245,12 +246,11 @@ const normalisasiStatus = (status) => {
 const STATUS = {
   menunggu_verifikasi: {
     label: "Menunggu verifikasi",
-    className: "bg-[#BAC8B1] text-[#404E3B]",
+    className: "bg-yellow-100 text-yellow-800",
   },
-  setuju: { label: "Disetujui", className: "bg-[#404E3B] text-[#E6E6E6]" },
+  setuju: { label: "Disetujui", className: "bg-green-100 text-green-800" },
   revisi: { label: "Perlu revisi", className: "bg-red-100 text-red-800" },
 };
-
 const LABEL_BERKAS = {
   "surat-pengajuan": "Surat pengajuan magang",
   "bukti-spp": "Bukti pembayaran SPP",
@@ -315,16 +315,27 @@ const normalisasiAnggota = (anggota) =>
       }))
     : [];
 
-// Tempat magang ke-2 dari server (jika ada)
+// Tempat magang ke-2 dari server (jika ada).
+// Server bisa mengirim array tempat_magang ATAU field instansi_kedua.
 const ambilTempat2 = (item = {}) => {
   const t = Array.isArray(item.tempat_magang) ? item.tempat_magang[1] : null;
-  if (!t) return null;
-  return {
-    instansi: t.instansi ?? t.nama ?? "",
-    alamat_instansi: t.alamat_instansi ?? t.alamat ?? "",
-    tanggal_mulai: String(t.tanggal_mulai || "").slice(0, 10),
-    tanggal_selesai: String(t.tanggal_selesai || "").slice(0, 10),
-  };
+  if (t) {
+    return {
+      instansi: t.instansi ?? t.nama ?? "",
+      alamat_instansi: t.alamat_instansi ?? t.alamat ?? "",
+      tanggal_mulai: String(t.tanggal_mulai || "").slice(0, 10),
+      tanggal_selesai: String(t.tanggal_selesai || "").slice(0, 10),
+    };
+  }
+  if (item.instansi_kedua) {
+    return {
+      instansi: item.instansi_kedua,
+      alamat_instansi: item.alamat_instansi_kedua ?? "",
+      tanggal_mulai: String(item.tanggal_mulai_kedua || "").slice(0, 10),
+      tanggal_selesai: String(item.tanggal_selesai_kedua || "").slice(0, 10),
+    };
+  }
+  return null;
 };
 
 const normalisasiRiwayat = (item = {}) => {
@@ -749,12 +760,8 @@ export default function FormPengajuan() {
   const [disetujui, setDisetujui] = useState(false);
   const [menyetujui, setMenyetujui] = useState(false);
   const [versiPreview, setVersiPreview] = useState(0);
-  const [preview, setPreview] = useState({
-    src: "",
-    srcDoc: "",
-    loading: false,
-    error: "",
-  });
+  // Satu entri per surat (satu surat per instansi), ditampilkan bersamaan
+  const [previews, setPreviews] = useState([]);
 
   // Riwayat pengajuan yang sudah dikirim
   const [riwayat, setRiwayat] = useState([]);
@@ -848,41 +855,59 @@ export default function FormPengajuan() {
     };
   }, [pilihId, tampilRiwayat]);
 
+  // Banyaknya surat = banyaknya instansi (1 atau 2)
+  const jumlahSurat = form.tempat2 ? 2 : 1;
+
   useEffect(() => {
     if (step !== 2 || !pengajuanId.current) return;
     let batal = false;
-    let objectUrl = "";
+    const objectUrls = [];
 
-    setPreview({ src: "", srcDoc: "", loading: true, error: "" });
-    ambilPreview(pengajuanId.current)
-      .then((hasil) => {
-        if (batal) {
-          if (hasil.objectUrl) URL.revokeObjectURL(hasil.objectUrl);
-          return;
-        }
-        objectUrl = hasil.objectUrl || "";
-        setPreview({
-          src: hasil.src || "",
-          srcDoc: hasil.srcDoc || "",
-          loading: false,
-          error: "",
-        });
-      })
-      .catch((err) => {
-        if (!batal)
-          setPreview({
-            src: "",
-            srcDoc: "",
+    const ubahSurat = (index, nilai) =>
+      setPreviews((prev) => prev.map((p, i) => (i === index ? nilai : p)));
+
+    setPreviews(
+      Array.from({ length: jumlahSurat }, () => ({
+        src: "",
+        srcDoc: "",
+        loading: true,
+        error: "",
+      })),
+    );
+
+    for (let urutan = 1; urutan <= jumlahSurat; urutan += 1) {
+      const index = urutan - 1;
+
+      ambilPreview(pengajuanId.current, urutan)
+        .then((hasil) => {
+          if (batal) {
+            if (hasil.objectUrl) URL.revokeObjectURL(hasil.objectUrl);
+            return;
+          }
+          if (hasil.objectUrl) objectUrls.push(hasil.objectUrl);
+          ubahSurat(index, {
+            src: hasil.src || "",
+            srcDoc: hasil.srcDoc || "",
             loading: false,
-            error: pesanDariError(err),
+            error: "",
           });
-      });
+        })
+        .catch((err) => {
+          if (!batal)
+            ubahSurat(index, {
+              src: "",
+              srcDoc: "",
+              loading: false,
+              error: pesanDariError(err),
+            });
+        });
+    }
 
     return () => {
       batal = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrls.forEach((u) => URL.revokeObjectURL(u));
     };
-  }, [step, versiPreview]);
+  }, [step, versiPreview, jumlahSurat]);
 
   const update = (field) => (e) => {
     let value = e.target.files ? e.target.files[0] || null : e.target.value;
@@ -1207,7 +1232,7 @@ export default function FormPengajuan() {
     setErrors({});
     setMsg(null);
     setDisetujui(false);
-    setPreview({ src: "", srcDoc: "", loading: false, error: "" });
+    setPreviews([]);
     setVersiForm((v) => v + 1);
     setSedangRevisi(null);
     setBuatBaru(true);
@@ -1235,7 +1260,7 @@ export default function FormPengajuan() {
     setErrors({});
     setMsg(null);
     setDisetujui(Boolean(item.sudah_ditandatangani));
-    setPreview({ src: "", srcDoc: "", loading: false, error: "" });
+    setPreviews([]);
     setVersiForm((v) => v + 1);
     setSedangRevisi({ id: item.id, catatan: item.catatan_revisi || "" });
     setBuatBaru(true);
@@ -1800,52 +1825,72 @@ export default function FormPengajuan() {
 
                 {step === 2 && (
                   <div>
-                    <div className="mb-4 overflow-hidden rounded-lg border border-[#BAC8B1] bg-white">
-                      {preview.loading && (
-                        <p className="p-6 text-sm">Memuat preview surat...</p>
-                      )}
-                      {preview.error && (
-                        <div className="p-6">
-                          <p className="text-sm font-medium text-[#b42318]">
-                            {preview.error}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => setVersiPreview((v) => v + 1)}
-                            className="mt-2 text-sm font-semibold underline hover:text-[#7B9669]"
-                          >
-                            Muat ulang preview
-                          </button>
+                    {previews.map((p, i) => {
+                      const namaInstansi =
+                        i === 0 ? form.instansi : form.tempat2?.instansi;
+
+                      return (
+                        <div key={i} className="mb-6">
+                          {jumlahSurat > 1 && (
+                            <p className="mb-2 text-sm font-semibold">
+                              Surat {i + 1} dari {jumlahSurat}
+                              {namaInstansi ? ` · ${namaInstansi}` : ""}
+                            </p>
+                          )}
+
+                          <div className="overflow-hidden rounded-lg border border-[#BAC8B1] bg-white">
+                            {p.loading && (
+                              <p className="p-6 text-sm">
+                                Memuat preview surat...
+                              </p>
+                            )}
+                            {p.error && (
+                              <div className="p-6">
+                                <p className="text-sm font-medium text-[#b42318]">
+                                  {p.error}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => setVersiPreview((v) => v + 1)}
+                                  className="mt-2 text-sm font-semibold underline hover:text-[#7B9669]"
+                                >
+                                  Muat ulang preview
+                                </button>
+                              </div>
+                            )}
+                            {!p.loading &&
+                              !p.error &&
+                              (p.src || p.srcDoc) && (
+                                <iframe
+                                  title={`Preview surat ${i + 1}`}
+                                  src={
+                                    p.src
+                                      ? `${p.src}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`
+                                      : undefined
+                                  }
+                                  srcDoc={p.srcDoc || undefined}
+                                  className="w-full rounded-lg border border-[#BAC8B1] bg-white"
+                                  style={{ minHeight: 600 }}
+                                  onLoad={(e) => {
+                                    const doc = e.target.contentDocument;
+                                    if (doc && p.srcDoc) {
+                                      e.target.style.height =
+                                        doc.documentElement.scrollHeight + "px";
+                                    }
+                                  }}
+                                />
+                              )}
+                          </div>
                         </div>
-                      )}
-                      {!preview.loading &&
-                        !preview.error &&
-                        (preview.src || preview.srcDoc) && (
-                          <iframe
-                            title="Preview surat"
-                            src={
-                              preview.src
-                                ? `${preview.src}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`
-                                : undefined
-                            }
-                            srcDoc={preview.srcDoc || undefined}
-                            className="w-full rounded-lg border border-[#BAC8B1] bg-white"
-                            style={{ minHeight: 600 }}
-                            onLoad={(e) => {
-                              const doc = e.target.contentDocument;
-                              if (doc && preview.srcDoc) {
-                                e.target.style.height =
-                                  doc.documentElement.scrollHeight + "px";
-                              }
-                            }}
-                          />
-                        )}
-                    </div>
+                      );
+                    })}
 
                     <Field id="ttd" label="Persetujuan" error={errors.ttd}>
                       <p className="mb-3 text-sm">
-                        Periksa isi surat di atas. Tekan Setujui untuk
-                        menandatangani surat dengan QR code.
+                        Periksa isi {jumlahSurat > 1 ? "kedua surat" : "surat"} di
+                        atas. Tekan Setujui untuk menandatangani{" "}
+                        {jumlahSurat > 1 ? "semua surat" : "surat"} dengan QR
+                        code.
                       </p>
                       <div className="flex flex-wrap items-center gap-2">
                         {disetujui ? (
@@ -1866,7 +1911,9 @@ export default function FormPengajuan() {
                             type="button"
                             onClick={setujui}
                             disabled={
-                              menyetujui || preview.loading || !!preview.error
+                              menyetujui ||
+                              previews.length === 0 ||
+                              previews.some((p) => p.loading || p.error)
                             }
                             className="w-fit border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
                           >
