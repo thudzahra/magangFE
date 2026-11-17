@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button, Card, Label } from "flowbite-react";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://172.18.160.149:8000";
+const API_URL = import.meta.env.VITE_API_URL || "http://192.168.0.104:8000";
 
 const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 

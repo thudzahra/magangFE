@@ -134,6 +134,10 @@ function nomorWa(hp) {
 const INPUT =
   "w-full rounded-lg border border-[#BAC8B1] bg-white px-3 py-2.5 text-sm font-semibold text-[#404E3B] outline-none focus:border-[#404E3B] focus:ring-2 focus:ring-[#BAC8B1] disabled:opacity-60";
 
+// Gaya tombol WhatsApp (dipakai tombol kontak biasa dan tombol kirim surat)
+const TOMBOL_WA =
+  "inline-flex rounded-lg border border-[#404E3B] px-4 py-2 text-sm font-bold text-[#404E3B] transition hover:bg-[#404E3B] hover:text-[#E6E6E6] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B9669] disabled:cursor-not-allowed disabled:opacity-60";
+
 // Kartu pengelompok form: judul + isi
 function Section({ judul, keterangan, children }) {
   return (
@@ -207,6 +211,9 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
   const [error, setError] = useState("");
   const [sukses, setSukses] = useState("");
 
+  // BARU: urutan surat (1/2) yang sedang dibuatkan link WhatsApp-nya, null bila tidak ada
+  const [waBusy, setWaBusy] = useState(null);
+
   const [form, setForm] = useState(() => formAwal(item));
 
   // Popup yang sedang terbuka: "verifikasi" | "revisi" | "keluar" | null
@@ -222,11 +229,15 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
   const hp = cariNilai(item, KEY_HP);
   const email = cariNilai(item, KEY_EMAIL);
   const tujuanWa = nomorWa(hp);
+
+  // Link kontak biasa (sapaan singkat). Hanya dipakai SEBELUM pengajuan diverifikasi.
+  // Setelah diverifikasi, pesan dibuat backend lewat kirimSuratWa().
   const linkWa = tujuanWa
     ? `https://wa.me/${tujuanWa}?text=${encodeURIComponent(
         `Halo ${item.nama}, kami dari admin magang Fakultas Kehutanan dan Lingkungan IPB terkait pengajuan magang Anda.`
       )}`
     : "";
+
   const suratMagang = item.daftarBerkas.find((b) => b.jenis === "surat-magang");
   const suratMagang2 = item.daftarBerkas.find(
     (b) => b.jenis === "surat-magang-kedua"
@@ -427,6 +438,48 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
     }
   }
 
+  // BARU: minta backend membuat pesan + link unduh sementara, lalu buka WhatsApp.
+  // Pesan TIDAK terkirim otomatis: admin menekan kirim sendiri di WhatsApp.
+  // urutan: 1 = surat instansi pertama, 2 = surat instansi kedua.
+  async function kirimSuratWa(urutan) {
+    setError("");
+    setSukses("");
+
+    // Buka tab SEKARANG (masih di dalam klik) supaya tidak diblokir popup blocker.
+    const tab = window.open("", "_blank");
+
+    setWaBusy(urutan);
+
+    try {
+      const response = await panggilApi(ENDPOINT.whatsapp(item.id, urutan), {
+        method: "POST",
+      });
+
+      // Tahan terhadap dua bentuk respons: {data:{...}} atau {data:{data:{...}}}
+      const hasil = response?.data ?? response;
+      const url = hasil?.whatsapp_url ?? hasil?.data?.whatsapp_url;
+
+      if (!url) {
+        throw new Error("Respons server tidak berisi link WhatsApp.");
+      }
+
+      if (tab) {
+        tab.location.href = url;
+      } else {
+        window.open(url, "_blank");
+      }
+
+      setSukses(
+        "WhatsApp dibuka dengan pesan yang sudah terisi. Tekan kirim di WhatsApp untuk mengirimnya."
+      );
+    } catch (err) {
+      tab?.close();
+      setError(err.message || "Gagal membuat link WhatsApp.");
+    } finally {
+      setWaBusy(null);
+    }
+  }
+
   // ---------- Popup verifikasi / revisi / keluar ----------
   function verifikasi() {
     setDialog("verifikasi");
@@ -578,15 +631,59 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
               <span className="tabular-nums">{hp || "-"}</span>
             </div>
 
-            {linkWa && (
+            {/* Sebelum diverifikasi: kontak biasa */}
+            {!verified && linkWa && (
               <a
                 href={linkWa}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-1 inline-flex rounded-lg border border-[#404E3B] px-4 py-2 text-sm font-bold text-[#404E3B] transition hover:bg-[#404E3B] hover:text-[#E6E6E6] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B9669]"
+                className={`mt-1 ${TOMBOL_WA}`}
               >
                 Hubungi via WhatsApp
               </a>
+            )}
+
+            {/* BARU: setelah diverifikasi, kirim surat via WhatsApp (pesan dibuat backend) */}
+            {verified && (suratMagang || suratMagang2) && (
+              <div className="mt-1 flex flex-wrap gap-2">
+                {suratMagang && (
+                  <button
+                    type="button"
+                    onClick={() => kirimSuratWa(1)}
+                    disabled={waBusy !== null || !tujuanWa}
+                    title={
+                      tujuanWa
+                        ? undefined
+                        : "Mahasiswa belum memiliki nomor WhatsApp"
+                    }
+                    className={TOMBOL_WA}
+                  >
+                    {waBusy === 1
+                      ? "Membuat link..."
+                      : item.tempat2
+                      ? "Kirim surat instansi 1 via WhatsApp"
+                      : "Kirim surat via WhatsApp"}
+                  </button>
+                )}
+
+                {suratMagang2 && (
+                  <button
+                    type="button"
+                    onClick={() => kirimSuratWa(2)}
+                    disabled={waBusy !== null || !tujuanWa}
+                    title={
+                      tujuanWa
+                        ? undefined
+                        : "Mahasiswa belum memiliki nomor WhatsApp"
+                    }
+                    className={TOMBOL_WA}
+                  >
+                    {waBusy === 2
+                      ? "Membuat link..."
+                      : "Kirim surat instansi 2 via WhatsApp"}
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>
