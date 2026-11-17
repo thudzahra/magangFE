@@ -24,6 +24,10 @@ import {
 // Kalau di routes/api.php kamu pakai Route::put, ganti jadi "PUT".
 const METHOD_EDIT = "PATCH";
 
+// Nama field daftar anggota yang dikirim ke PengajuanMagangController@update.
+// Sesuaikan dengan validasi di backend.
+const KEY_KIRIM_ANGGOTA = "anggota";
+
 // =====================================================
 // ISI HALAMAN DETAIL, EDIT, DAN VERIFIKASI
 // =====================================================
@@ -35,9 +39,10 @@ const DEPARTEMEN_DARI_NIM = {
   E441: "SVK",
 };
 
-// Anggota kelompok dari API: array of {nama, nim} (atau string / JSON string).
+// Daftar mahasiswa dari API (`daftar_mahasiswa`, urutan pertama biasanya ketua).
+// Yang ditampilkan sebagai anggota adalah semua entri selain ketua (NIM sama).
 function ambilAnggota(item) {
-  let data = item.anggota;
+  let data = item.daftar_mahasiswa ?? item.anggota;
 
   if (typeof data === "string") {
     try {
@@ -49,11 +54,17 @@ function ambilAnggota(item) {
 
   if (!Array.isArray(data)) return [];
 
-  return data.map((a) =>
+  const lengkap = data.map((a) =>
     typeof a === "string"
       ? { nama: a, nim: "" }
       : { ...a, nama: a?.nama ?? a?.name ?? "", nim: a?.nim ?? "" }
   );
+
+  const idxKetua = lengkap.findIndex((a) => a.nim && a.nim === item.nim);
+
+  return idxKetua === -1
+    ? lengkap
+    : lengkap.filter((_, i) => i !== idxKetua);
 }
 
 function formAwal(item) {
@@ -73,6 +84,51 @@ function formAwal(item) {
     tanggal_selesai2: tanggalUntukInput(item.tempat2?.tanggal_selesai),
     anggota: ambilAnggota(item),
   };
+}
+
+// Nama field kontak dari API (dicari di pengajuan, lalu di data mahasiswa/user).
+// Tambahkan nama field backend kamu di sini kalau belum ada.
+const KEY_HP = [
+  "no_hp",
+  "nomor_hp",
+  "no_telepon",
+  "nomor_telepon",
+  "no_telp",
+  "telepon",
+  "no_wa",
+  "nomor_wa",
+  "whatsapp",
+  "phone",
+  "hp",
+];
+const KEY_EMAIL = ["email"];
+
+function cariNilai(item, keys) {
+  const sumber = [item, item.mahasiswa, item.user, item.pengaju];
+
+  for (const obj of sumber) {
+    if (!obj || typeof obj !== "object") continue;
+
+    for (const k of keys) {
+      const v = obj[k];
+
+      if (v != null && String(v).trim() !== "") return String(v).trim();
+    }
+  }
+
+  return "";
+}
+
+// 0812-xxxx / +62 812 xxxx / 812xxxx  ->  62812xxxx (format wa.me)
+function nomorWa(hp) {
+  const angka = String(hp).replace(/\D/g, "");
+
+  if (!angka) return "";
+  if (angka.startsWith("62")) return angka;
+  if (angka.startsWith("0")) return `62${angka.slice(1)}`;
+  if (angka.startsWith("8")) return `62${angka}`;
+
+  return angka;
 }
 
 const INPUT =
@@ -125,6 +181,14 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
   // Data bisa langsung diubah selama belum disetujui.
   const edit = status === "menunggu" || status === "ditolak";
   const nomorSurat = nomorSuratTampil(item);
+  const hp = cariNilai(item, KEY_HP);
+  const email = cariNilai(item, KEY_EMAIL);
+  const tujuanWa = nomorWa(hp);
+  const linkWa = tujuanWa
+    ? `https://wa.me/${tujuanWa}?text=${encodeURIComponent(
+        `Halo ${item.nama}, kami dari admin magang Fakultas Kehutanan dan Lingkungan IPB terkait pengajuan magang Anda (#${item.id}).`
+      )}`
+    : "";
   const suratMagang = item.daftarBerkas.find((b) => b.jenis === "surat-magang");
   const suratMagang2 = item.daftarBerkas.find(
     (b) => b.jenis === "surat-magang-kedua"
@@ -171,12 +235,6 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
       "nim",
       e.target.value.toUpperCase().replace(/\s/g, "").slice(0, 11)
     );
-
-  const tambahAnggota = () =>
-    setForm((f) => ({ ...f, anggota: [...f.anggota, { nama: "", nim: "" }] }));
-
-  const hapusAnggota = (i) =>
-    setForm((f) => ({ ...f, anggota: f.anggota.filter((_, idx) => idx !== i) }));
 
   const pilihanDepartemen = [
     ...new Map(
@@ -264,7 +322,7 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
           tanggal_selesai: form.tanggal_selesai,
           ...(adaKelompok
             ? {
-                anggota: form.anggota.map((a) => ({
+                [KEY_KIRIM_ANGGOTA]: form.anggota.map((a) => ({
                   ...a,
                   nama: String(a.nama).trim(),
                   nim: String(a.nim).trim(),
@@ -431,19 +489,56 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
 
       {/* ISI */}
       <main className="mx-auto w-full max-w-5xl flex-1 space-y-5 px-4 py-6 sm:px-6">
-        {/* Status */}
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-[#BAC8B1] bg-white px-5 py-3 text-sm">
-          <span className="flex items-center gap-2">
-            <span className="opacity-70">Status</span>
-            <StatusBadge status={item.status} />
-          </span>
-
-          {nomorSurat && (
+        {/* Status & kontak */}
+        <div className="space-y-3 rounded-xl border border-[#BAC8B1] bg-white px-5 py-4 text-sm">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <span className="flex items-center gap-2">
-              <span className="opacity-70">Nomor surat</span>
-              <b className="tabular-nums">{nomorSurat}</b>
+              <span className="opacity-70">Status</span>
+              <StatusBadge status={item.status} />
             </span>
-          )}
+
+            {nomorSurat && (
+              <span className="flex items-center gap-2">
+                <span className="opacity-70">Nomor surat</span>
+                <b className="tabular-nums">{nomorSurat}</b>
+              </span>
+            )}
+          </div>
+
+          <div className="space-y-2 border-t border-[#E6E6E6] pt-3">
+            <div className="flex gap-2">
+              <span className="w-28 shrink-0 opacity-70">Email</span>
+              <span>:</span>
+
+              {email ? (
+                <a
+                  href={`mailto:${email}`}
+                  className="min-w-0 break-all underline-offset-2 hover:underline"
+                >
+                  {email}
+                </a>
+              ) : (
+                <span>-</span>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <span className="w-28 shrink-0 opacity-70">No. telepon</span>
+              <span>:</span>
+              <span className="tabular-nums">{hp || "-"}</span>
+            </div>
+
+            {linkWa && (
+              <a
+                href={linkWa}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 inline-flex rounded-lg border border-[#404E3B] px-4 py-2 text-sm font-bold text-[#404E3B] transition hover:bg-[#404E3B] hover:text-[#E6E6E6] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B9669]"
+              >
+                Hubungi via WhatsApp
+              </a>
+            )}
+          </div>
         </div>
 
         {status === "ditolak" && item.catatan_revisi && (
@@ -514,15 +609,6 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
                   Anggota kelompok ({daftarAnggota.length} orang)
                 </h3>
 
-                {edit && (
-                  <Button
-                    className="!px-3 !py-1.5"
-                    disabled={busy}
-                    onClick={tambahAnggota}
-                  >
-                    + Tambah anggota
-                  </Button>
-                )}
               </div>
 
               {daftarAnggota.length === 0 && (
@@ -534,8 +620,8 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
                   key={i}
                   className={`grid items-end gap-3 ${
                     edit
-                      ? "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
-                      : "md:grid-cols-2"
+                      ? "md:grid-cols-2"
+                      : "md:grid-cols-3"
                   }`}
                 >
                   <Kolom label={`Nama anggota ${i + 1}`} edit={edit} value={a.nama}>
@@ -557,16 +643,10 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
                     />
                   </Kolom>
 
-                  {edit && (
-                    <Button
-                      variant="danger"
-                      className="!py-2.5"
-                      disabled={busy}
-                      onClick={() => hapusAnggota(i)}
-                    >
-                      Hapus
-                    </Button>
+                  {!edit && (
+                    <Kolom label="Departemen" edit={false} value={a.departemen} />
                   )}
+
                 </div>
               ))}
             </div>

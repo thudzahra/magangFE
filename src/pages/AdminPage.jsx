@@ -327,11 +327,11 @@ function urutkanPengajuan(a, b) {
 const STATUS = {
   menunggu: {
     label: "Menunggu verifikasi",
-    className: "bg-[#BAC8B1] text-[#404E3B]",
+    className: "bg-[#FDEFC3] text-[#8A5A00]",
   },
   terverifikasi: {
     label: "Terverifikasi",
-    className: "bg-[#404E3B] text-[#E6E6E6]",
+    className: "bg-[#D9F2D9] text-[#1F6B2E]",
   },
   ditolak: {
     label: "Perlu revisi",
