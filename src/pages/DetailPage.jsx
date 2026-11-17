@@ -169,12 +169,50 @@ function Kolom({ label, edit, value, children, className = "" }) {
   );
 }
 
+// Popup di dalam aplikasi (pengganti window.confirm / window.prompt bawaan browser).
+// Tutup dengan tombol Batal, klik area gelap, atau tombol Esc.
+function Dialog({ judul, onClose, children }) {
+  useEffect(() => {
+    const tekanTombol = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+
+    window.addEventListener("keydown", tekanTombol);
+
+    return () => window.removeEventListener("keydown", tekanTombol);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={judul}
+        className="w-full max-w-md rounded-2xl bg-white p-6 text-[#404E3B] shadow-2xl"
+      >
+        <h2 className="text-lg font-bold">{judul}</h2>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sukses, setSukses] = useState("");
 
   const [form, setForm] = useState(() => formAwal(item));
+
+  // Popup yang sedang terbuka: "verifikasi" | "revisi" | "keluar" | null
+  const [dialog, setDialog] = useState(null);
+  const [catatan, setCatatan] = useState("");
+  const [errCatatan, setErrCatatan] = useState("");
 
   const status = normalisasiStatus(item.status);
   const verified = status === "terverifikasi";
@@ -186,7 +224,7 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
   const tujuanWa = nomorWa(hp);
   const linkWa = tujuanWa
     ? `https://wa.me/${tujuanWa}?text=${encodeURIComponent(
-        `Halo ${item.nama}, kami dari admin magang Fakultas Kehutanan dan Lingkungan IPB terkait pengajuan magang Anda (#${item.id}).`
+        `Halo ${item.nama}, kami dari admin magang Fakultas Kehutanan dan Lingkungan IPB terkait pengajuan magang Anda.`
       )}`
     : "";
   const suratMagang = item.daftarBerkas.find((b) => b.jenis === "surat-magang");
@@ -389,25 +427,36 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
     }
   }
 
+  // ---------- Popup verifikasi / revisi / keluar ----------
   function verifikasi() {
-    const yakin = window.confirm(
-      "Verifikasi pengajuan ini? Nomor surat dibuat otomatis dan keputusan tidak dapat dibatalkan."
-    );
+    setDialog("verifikasi");
+  }
 
-    if (yakin) kirimStatus({ status: "setuju" });
+  function konfirmasiVerifikasi() {
+    setDialog(null);
+    kirimStatus({ status: "setuju" });
   }
 
   function tolak() {
-    const alasan = window.prompt("Catatan revisi untuk mahasiswa (wajib diisi):");
+    setCatatan("");
+    setErrCatatan("");
+    setDialog("revisi");
+  }
 
-    if (alasan === null) return;
+  function konfirmasiRevisi() {
+    const alasan = catatan.trim();
 
-    if (!alasan.trim()) {
-      setError("Catatan revisi wajib diisi.");
+    if (!alasan) {
+      setErrCatatan("Catatan revisi wajib diisi.");
       return;
     }
 
-    kirimStatus({ status: "revisi", catatan: alasan.trim() });
+    setDialog(null);
+    kirimStatus({ status: "revisi", catatan: alasan });
+  }
+
+  function tutupDialog() {
+    setDialog(null);
   }
 
   // sufiks "" = instansi 1, "2" = instansi 2 (sesuai key di form)
@@ -467,7 +516,8 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
   }
 
   function kembali() {
-    if (berubah && !window.confirm("Ada perubahan yang belum disimpan. Tetap kembali?")) {
+    if (berubah) {
+      setDialog("keluar");
       return;
     }
 
@@ -482,7 +532,7 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
           <Button onClick={kembali}>← Kembali</Button>
 
           <h1 className="truncate font-bold">
-            Pengajuan #{item.id} — {item.nama}
+            Pengajuan — {item.nama}
           </h1>
         </div>
       </header>
@@ -559,47 +609,47 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
         >
           <div className="space-y-4">
             {adaKelompok && <h3 className="text-sm font-bold">Ketua kelompok</h3>}
-          <div className="grid gap-4 md:grid-cols-2">
-            <Kolom label="Nama" edit={edit} value={item.nama}>
-              <input
-                className={INPUT}
-                value={form.nama}
-                onChange={ubah("nama")}
-                disabled={busy}
-              />
-            </Kolom>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Kolom label="Nama" edit={edit} value={item.nama}>
+                <input
+                  className={INPUT}
+                  value={form.nama}
+                  onChange={ubah("nama")}
+                  disabled={busy}
+                />
+              </Kolom>
 
-            <Kolom label="NIM" edit={edit} value={item.nim}>
-              <input
-                className={INPUT}
-                value={form.nim}
-                onChange={ubahNim}
-                maxLength={11}
-                disabled={busy}
-              />
-            </Kolom>
+              <Kolom label="NIM" edit={edit} value={item.nim}>
+                <input
+                  className={INPUT}
+                  value={form.nim}
+                  onChange={ubahNim}
+                  maxLength={11}
+                  disabled={busy}
+                />
+              </Kolom>
 
-            <Kolom
-              label="Departemen"
-              edit={edit}
-              value={item.departemen}
-              className="md:col-span-2"
-            >
-              <select
-                className={INPUT}
-                value={form.departemen}
-                onChange={ubah("departemen")}
-                disabled={busy}
+              <Kolom
+                label="Departemen"
+                edit={edit}
+                value={item.departemen}
+                className="md:col-span-2"
               >
-                <option value="">Pilih departemen</option>
-                {pilihanDepartemen.map((dep) => (
-                  <option key={dep.kode} value={dep.kode}>
-                    {dep.nama}
-                  </option>
-                ))}
-              </select>
-            </Kolom>
-          </div>
+                <select
+                  className={INPUT}
+                  value={form.departemen}
+                  onChange={ubah("departemen")}
+                  disabled={busy}
+                >
+                  <option value="">Pilih departemen</option>
+                  {pilihanDepartemen.map((dep) => (
+                    <option key={dep.kode} value={dep.kode}>
+                      {dep.nama}
+                    </option>
+                  ))}
+                </select>
+              </Kolom>
+            </div>
           </div>
 
           {adaKelompok && (
@@ -608,7 +658,6 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
                 <h3 className="text-sm font-bold">
                   Anggota kelompok ({daftarAnggota.length} orang)
                 </h3>
-
               </div>
 
               {daftarAnggota.length === 0 && (
@@ -619,9 +668,7 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
                 <div
                   key={i}
                   className={`grid items-end gap-3 ${
-                    edit
-                      ? "md:grid-cols-2"
-                      : "md:grid-cols-3"
+                    edit ? "md:grid-cols-2" : "md:grid-cols-3"
                   }`}
                 >
                   <Kolom label={`Nama anggota ${i + 1}`} edit={edit} value={a.nama}>
@@ -646,7 +693,6 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
                   {!edit && (
                     <Kolom label="Departemen" edit={false} value={a.departemen} />
                   )}
-
                 </div>
               ))}
             </div>
@@ -696,18 +742,18 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
 
         {/* 3. Berkas */}
         <Section judul="3. Berkas">
-        {URUTAN_BERKAS.map((jenis) => {
-          const berkas = item.daftarBerkas.find((b) => b.jenis === jenis);
+          {URUTAN_BERKAS.map((jenis) => {
+            const berkas = item.daftarBerkas.find((b) => b.jenis === jenis);
 
-          if (berkas) return <FilePreview key={jenis} berkas={berkas} />;
-          if (BERKAS_OPSIONAL.includes(jenis)) return null;
+            if (berkas) return <FilePreview key={jenis} berkas={berkas} />;
+            if (BERKAS_OPSIONAL.includes(jenis)) return null;
 
-          return <BerkasKosong key={jenis} label={LABEL_BERKAS[jenis]} />;
-        })}
+            return <BerkasKosong key={jenis} label={LABEL_BERKAS[jenis]} />;
+          })}
 
-        {verified && suratMagang && <FilePreview berkas={suratMagang} />}
+          {verified && suratMagang && <FilePreview berkas={suratMagang} />}
 
-        {verified && suratMagang2 && <FilePreview berkas={suratMagang2} />}
+          {verified && suratMagang2 && <FilePreview berkas={suratMagang2} />}
         </Section>
 
         {sukses && (
@@ -782,6 +828,73 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
           )}
         </div>
       </div>
+
+      {/* POPUP */}
+      {dialog === "verifikasi" && (
+        <Dialog judul="Verifikasi pengajuan ini?" onClose={tutupDialog}>
+          <p className="mt-2 text-sm text-[#5b6b55]">
+            Nomor surat akan dibuat otomatis dan surat pengantar diterbitkan.
+            Keputusan ini tidak dapat dibatalkan.
+          </p>
+
+          <div className="mt-6 flex justify-end gap-2">
+            <Button onClick={tutupDialog}>Batal</Button>
+            <Button variant="primary" onClick={konfirmasiVerifikasi}>
+              Ya, verifikasi
+            </Button>
+          </div>
+        </Dialog>
+      )}
+
+      {dialog === "revisi" && (
+        <Dialog judul="Minta mahasiswa merevisi" onClose={tutupDialog}>
+          <label className="mt-3 flex flex-col gap-1.5 text-sm">
+            <span className="font-medium opacity-70">
+              Catatan revisi untuk mahasiswa (wajib diisi)
+            </span>
+
+            <textarea
+              autoFocus
+              rows={4}
+              maxLength={1000}
+              className={INPUT}
+              value={catatan}
+              onChange={(e) => {
+                setCatatan(e.target.value);
+                setErrCatatan("");
+              }}
+              placeholder="Tuliskan bagian yang perlu diperbaiki..."
+            />
+          </label>
+
+          {errCatatan && (
+            <p className="mt-1 text-xs font-medium text-red-700">{errCatatan}</p>
+          )}
+
+          <div className="mt-6 flex justify-end gap-2">
+            <Button onClick={tutupDialog}>Batal</Button>
+            <Button variant="danger" onClick={konfirmasiRevisi}>
+              Kirim revisi
+            </Button>
+          </div>
+        </Dialog>
+      )}
+
+      {dialog === "keluar" && (
+        <Dialog judul="Perubahan belum disimpan" onClose={tutupDialog}>
+          <p className="mt-2 text-sm text-[#5b6b55]">
+            Ada perubahan yang belum disimpan. Jika kembali sekarang,
+            perubahan itu akan hilang.
+          </p>
+
+          <div className="mt-6 flex justify-end gap-2">
+            <Button onClick={tutupDialog}>Tetap di sini</Button>
+            <Button variant="danger" onClick={onClose}>
+              Kembali tanpa menyimpan
+            </Button>
+          </div>
+        </Dialog>
+      )}
     </div>
   );
 }
