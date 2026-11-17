@@ -4,6 +4,7 @@ import Signup from "../pages/Signup";
 import Login from "../pages/Login";
 import FormPengajuan from "../pages/FormPengajuan";
 import AdminPage from "../pages/AdminPage";
+import DetailPage from "../pages/DetailPage";
 
 export default function RouteApp() {
   return (
@@ -28,6 +29,10 @@ export default function RouteApp() {
         <Route 
           path="/dashboard-admin" 
           element={<AdminPage />} 
+        />
+        <Route
+         path="/dashboard-admin/pengajuan/:id"
+         element={<DetailPage />} 
         />
       </Routes>
     </BrowserRouter>
