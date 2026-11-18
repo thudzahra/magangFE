@@ -8,13 +8,11 @@ import {
   TextInput,
 } from "flowbite-react";
 
-const API = "http://172.18.160.171:8000/api";
+const API = "http://172.18.160.149:8000/api";
 const ENDPOINT = {
   buat: "/pengajuan-magang", // POST = buat pengajuan, GET = daftar pengajuan milik mahasiswa
   ubah: (id) => `/pengajuan-magang/${id}`, // PUT = ubah, GET = detail
-  // urutan 1 = instansi pertama, 2 = instansi kedua
-  preview: (id, urutan = 1) =>
-    `/pengajuan-magang/${id}/preview-surat?urutan=${urutan}`,
+  preview: (id) => `/pengajuan-magang/${id}/preview-surat`,
   tandaTangan: (id) => `/pengajuan-magang/${id}/tanda-tangan`,
   kirim: (id) => `/pengajuan-magang/${id}/kirim`,
 };
@@ -49,11 +47,10 @@ const STEPS = ["Data diri", "Tempat magang", "Tanda tangan", "Berkas & kirim"];
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 const EKSTENSI_BOLEH = ["pdf", "jpg", "jpeg", "png"];
 
-// Semua input (TextInput & Textarea) berlatar putih
 const colors = {
-  gray: "border-[#7B9669] bg-white text-[#404E3B] placeholder-[#7a8575] focus:border-[#404E3B] focus:ring-[#7B9669]",
+  gray: "border-[#7B9669] bg-[#E6E6E6] text-[#404E3B] placeholder-[#7a8575] focus:border-[#404E3B] focus:ring-[#7B9669]",
   failure:
-    "border-[#b42318] bg-white text-[#404E3B] placeholder-[#7a8575] focus:border-[#b42318] focus:ring-[#b42318]",
+    "border-[#b42318] bg-[#E6E6E6] text-[#404E3B] placeholder-[#7a8575] focus:border-[#b42318] focus:ring-[#b42318]",
 };
 const inputTheme = { field: { input: { colors } } };
 const textareaTheme = { colors };
@@ -78,10 +75,10 @@ const formatSingkatan = (teks) =>
   });
 
 // Nama instansi: PT / CV / UD / PD ditulis tanpa titik
-// "pt.thudzahra" -> "PT Thudzahra", "PT. Maju" -> "PT Maju", "PT . Mayora" -> "PT Mayora"
+// "pt.thudzahra" -> "PT Thudzahra", "PT. Maju" -> "PT Maju"
 const formatInstansi = (teks) => {
   const tanpaTitik = teks.replace(
-    /(^|\s)(pt|cv|ud|pd)\s*\.\s*/gi,
+    /(^|\s)(pt|cv|ud|pd)\.\s*/gi,
     (_, awal, singkatan) => `${awal}${singkatan.toUpperCase()} `,
   );
   return formatSingkatan(tanpaTitik);
@@ -126,9 +123,8 @@ const panggilApi = async (path, { json, formData, method = "POST" } = {}) => {
   return data;
 };
 
-// Menerima urutan surat (1 = instansi pertama, 2 = instansi kedua)
-const ambilPreview = async (id, urutan = 1) => {
-  const response = await fetch(`${API}${ENDPOINT.preview(id, urutan)}`, {
+const ambilPreview = async (id) => {
+  const response = await fetch(`${API}${ENDPOINT.preview(id)}`, {
     headers: authHeaders(),
   });
   const type = response.headers.get("content-type") || "";
@@ -203,6 +199,10 @@ const bentukData = (f) => ({
     : [],
 });
 
+// =====================================================
+// DATA RIWAYAT
+// =====================================================
+
 const unwrap = (response) => response?.data ?? response;
 
 const toArray = (response) => {
@@ -245,7 +245,7 @@ const normalisasiStatus = (status) => {
 const STATUS = {
   menunggu_verifikasi: {
     label: "Menunggu verifikasi",
-    className: "bg-[#FDEFC3] text-[#8A5A00]",
+    className: "bg-[#BAC8B1] text-[#404E3B]",
   },
   setuju: { label: "Disetujui", className: "bg-[#404E3B] text-[#E6E6E6]" },
   revisi: { label: "Perlu revisi", className: "bg-red-100 text-red-800" },
@@ -253,21 +253,13 @@ const STATUS = {
 
 const LABEL_BERKAS = {
   "surat-pengajuan": "Surat pengajuan magang",
-  "surat-pengajuan-kedua": "Surat pengajuan magang (Instansi 2)",
   "bukti-spp": "Bukti pembayaran SPP",
   "surat-rekomendasi": "Surat rekomendasi",
   "surat-magang": "Surat pengantar magang (resmi)",
 };
 
-// Bila ada dua instansi, surat pertama diberi keterangan "(Instansi 1)"
-const labelBerkas = (jenis, item) =>
-  jenis === "surat-pengajuan" && item.instansi_kedua
-    ? `${LABEL_BERKAS[jenis]} (Instansi 1)`
-    : LABEL_BERKAS[jenis];
-
 const FIELD_LAMA = {
   "surat-pengajuan": "surat_pengajuan_url",
-  "surat-pengajuan-kedua": "surat_pengajuan_kedua_url",
   "bukti-spp": "bukti_spp_url",
   "surat-rekomendasi": "surat_rekomendasi_url",
   "surat-magang": "surat_magang_url",
@@ -285,13 +277,12 @@ const ambilBerkas = (item) => {
 
   return Object.keys(LABEL_BERKAS)
     .map((jenis) => {
-      const label = labelBerkas(jenis, item);
       const b = dariApi.find((x) => x.jenis === jenis);
 
       if (b?.preview_url) {
         return {
           jenis,
-          label,
+          label: LABEL_BERKAS[jenis],
           ekstensi: (b.ekstensi || ekstensiDari(b.preview_url)).toLowerCase(),
           preview_url: b.preview_url,
           download_url: b.download_url ?? null,
@@ -303,7 +294,7 @@ const ambilBerkas = (item) => {
       if (typeof lama === "string" && /^https?:/i.test(lama)) {
         return {
           jenis,
-          label,
+          label: LABEL_BERKAS[jenis],
           ekstensi: ekstensiDari(lama),
           preview_url: lama,
           download_url: null,
@@ -324,24 +315,15 @@ const normalisasiAnggota = (anggota) =>
       }))
     : [];
 
-// Tempat magang ke-2 dari server (jika ada).
-// Server mengirim field datar (instansi_kedua, dst.); array tempat_magang jadi cadangan.
+// Tempat magang ke-2 dari server (jika ada)
 const ambilTempat2 = (item = {}) => {
   const t = Array.isArray(item.tempat_magang) ? item.tempat_magang[1] : null;
-  const instansi = item.instansi_kedua ?? t?.instansi ?? t?.nama ?? "";
-
-  if (!instansi) return null;
-
+  if (!t) return null;
   return {
-    instansi,
-    alamat_instansi:
-      item.alamat_instansi_kedua ?? t?.alamat_instansi ?? t?.alamat ?? "",
-    tanggal_mulai: String(
-      item.tanggal_mulai_kedua ?? t?.tanggal_mulai ?? "",
-    ).slice(0, 10),
-    tanggal_selesai: String(
-      item.tanggal_selesai_kedua ?? t?.tanggal_selesai ?? "",
-    ).slice(0, 10),
+    instansi: t.instansi ?? t.nama ?? "",
+    alamat_instansi: t.alamat_instansi ?? t.alamat ?? "",
+    tanggal_mulai: String(t.tanggal_mulai || "").slice(0, 10),
+    tanggal_selesai: String(t.tanggal_selesai || "").slice(0, 10),
   };
 };
 
@@ -492,18 +474,17 @@ function BerkasBaris({ berkas, terbuka, onToggle }) {
 
 // Tampilan riwayat: isi formulir yang sama, hanya dibaca (tidak bisa diubah)
 function FormRiwayat({ item, memuatDetail }) {
-  const [activeTab, setActiveTab] = useState("data_diri");
-  // State untuk melacak berkas mana yang sedang di-preview (jika menggunakan iframe/gambar di dalam halaman)
-  const [previewBerkas, setPreviewBerkas] = useState(null);
+  const [terbuka, setTerbuka] = useState({});
 
   const anggota = Array.isArray(item.anggota) ? item.anggota : [];
+
   const tempat2 = ambilTempat2(item);
 
   const berkasServer = item.daftarBerkas.filter(
-    (b) => b.jenis !== "surat-magang" || item.status === "setuju"
+    (b) => b.jenis !== "surat-magang" || item.status === "setuju",
   );
 
-  // Berkas yang baru saja diunggah di perangkat ini
+  // Berkas yang baru saja diunggah di perangkat ini (dipakai jika server belum mengirim tautan berkas)
   const berkasLokal = (Array.isArray(item.berkasLokal) ? item.berkasLokal : [])
     .filter((l) => !berkasServer.some((b) => b.jenis === l.jenis))
     .map((l) => ({
@@ -518,18 +499,17 @@ function FormRiwayat({ item, memuatDetail }) {
 
   return (
     <div className="p-6 sm:p-8">
-      {/* Header Riwayat */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="font-bold text-lg">Pengajuan - {item.nama}</p>
-          <p className="text-xs text-gray-500">
+          <p className="font-bold">Pengajuan #{item.id}</p>
+          <p className="text-xs opacity-70">
             Dikirim {formatTanggal(item.dikirim)}
           </p>
         </div>
+
         <StatusBadge status={item.status} />
       </div>
 
-      {/* Stepper Horizontal */}
       <Stepper step={STEPS.length} />
 
       {memuatDetail && (
@@ -558,198 +538,180 @@ function FormRiwayat({ item, memuatDetail }) {
         </div>
       )}
 
-      {/* Navigasi Tab */}
-      <div className="mb-6 flex gap-6 border-b border-[#BAC8B1]">
-        {[
-          { id: "data_diri", label: "Data diri" },
-          { id: "tempat_magang", label: "Tempat magang" },
-          { id: "berkas", label: "Berkas" },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveTab(tab.id)}
-            className={`pb-2 text-sm font-semibold transition ${
-              activeTab === tab.id
-                ? "border-b-2 border-[#404E3B] text-[#404E3B]"
-                : "text-[#7B9669] hover:text-[#404E3B]"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="grid gap-x-4 sm:grid-cols-2">
+        <Field id="r-nama" label="Nama lengkap" optional>
+          <TextInput
+            id="r-nama"
+            theme={inputTheme}
+            value={item.nama}
+            readOnly
+            color="gray"
+            className="cursor-default"
+          />
+        </Field>
+        <Field id="r-nim" label="NIM" optional>
+          <TextInput
+            id="r-nim"
+            theme={inputTheme}
+            value={item.nim}
+            readOnly
+            color="gray"
+            className="cursor-default"
+          />
+        </Field>
       </div>
 
-      {/* Konten Berdasarkan Tab */}
-      <div className="space-y-6">
-        {/* --- TAB DATA DIRI --- */}
-        {activeTab === "data_diri" && (
-          <div>
-            {/* Pengirim (Nama, NIM, Departemen sejajar) */}
-            <div className="mb-6 grid gap-x-4 sm:grid-cols-3">
-              <div>
-                <p className="text-xs text-gray-500">Nama lengkap</p>
-                <p className="font-semibold">{item.nama}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">NIM</p>
-                <p className="font-semibold">{item.nim}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Departemen</p>
-                <p className="font-semibold">{item.departemen}</p>
-              </div>
-            </div>
+      <Field id="r-dep" label="Departemen / program studi" optional>
+        <TextInput
+          id="r-dep"
+          theme={inputTheme}
+          value={item.departemen}
+          readOnly
+          color="gray"
+          className="cursor-default"
+        />
+      </Field>
 
-            {/* Anggota Kelompok (Tanpa Border) */}
-            {anggota.length > 0 && (
-              <div>
-                <div className="mb-3 flex items-center justify-between">
-                  <p className="text-sm font-semibold">Anggota kelompok</p>
-                  <span className="text-xs text-gray-500">
-                    {anggota.length + 1} orang
-                  </span>
-                </div>
-                <div className="space-y-4">
-                  {anggota.map((a, i) => (
-                    <div key={i} className="grid gap-x-4 sm:grid-cols-3">
-                      <div>
-                        <p className="text-xs text-gray-500">Nama anggota</p>
-                        <p className="font-semibold">{a.nama}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">NIM</p>
-                        <p className="font-semibold">{a.nim}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Departemen</p>
-                        <p className="font-semibold">
-                          {namaDep(departemenDariNim(a.nim)) || "-"}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* --- TAB TEMPAT MAGANG --- */}
-        {activeTab === "tempat_magang" && (
-          <div className="space-y-4">
-            {/* Tempat Magang 1 */}
-            <div className="rounded-xl border border-[#BAC8B1] bg-[#F4F8F2] p-5">
-              <p className="mb-4 font-bold text-[#404E3B]">Tempat magang 1</p>
-              
-              <div className="grid gap-4 sm:grid-cols-2">
+      {anggota.length > 0 && (
+        <div className="mb-4">
+          <span className="mb-2 block text-sm font-semibold">
+            Anggota kelompok ({anggota.length + 1} orang)
+          </span>
+          <div className="space-y-2">
+            {anggota.map((a, i) => (
+              <div
+                key={i}
+                className="grid gap-x-4 rounded-lg border border-[#BAC8B1] p-3 sm:grid-cols-2"
+              >
                 <div>
-                  <p className="text-xs text-gray-500">Instansi</p>
-                  <p className="font-semibold text-[#404E3B]">{item.instansi || "-"}</p>
+                  <p className="text-xs opacity-70">Anggota {i + 2}</p>
+                  <p className="text-sm font-semibold">{a.nama}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Periode</p>
-                  <p className="font-semibold text-[#404E3B]">
-                    {formatTanggal(item.tanggal_mulai)} – {formatTanggal(item.tanggal_selesai)}
-                  </p>
-                </div>
-                <div className="sm:col-span-2">
-                  <p className="text-xs text-gray-500">Alamat</p>
-                  <p className="whitespace-pre-line font-semibold text-[#404E3B]">
-                    {item.alamat || "-"}
-                  </p>
+                  <p className="text-xs opacity-70">NIM</p>
+                  <p className="text-sm font-semibold">{a.nim}</p>
                 </div>
               </div>
-            </div>
-
-            {/* Tempat Magang 2 */}
-            {tempat2 && (
-              <div className="rounded-xl border border-[#BAC8B1] bg-[#F4F8F2] p-5">
-                <p className="mb-4 font-bold text-[#404E3B]">Tempat magang 2</p>
-                
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <p className="text-xs text-gray-500">Instansi</p>
-                    <p className="font-semibold text-[#404E3B]">{tempat2.instansi || "-"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Periode</p>
-                    <p className="font-semibold text-[#404E3B]">
-                      {formatTanggal(tempat2.tanggal_mulai)} – {formatTanggal(tempat2.tanggal_selesai)}
-                    </p>
-                  </div>
-                  <div className="sm:col-span-2">
-                    <p className="text-xs text-gray-500">Alamat</p>
-                    <p className="whitespace-pre-line font-semibold text-[#404E3B]">
-                      {tempat2.alamat_instansi || "-"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
+            ))}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* --- TAB BERKAS --- */}
-        {activeTab === "berkas" && (
-          <div>
-            {berkas.length > 0 ? (
-              <div className="flex flex-col">
-                {berkas.map((b) => (
-                  <div
-                    key={b.jenis}
-                    className="flex flex-wrap items-center justify-between gap-3 border-b border-[#BAC8B1] py-4 text-sm last:border-0"
-                  >
-                    <strong className="text-[#404E3B]">{b.label}</strong>
-                    
-                    <div className="flex items-center gap-4 font-semibold text-[#1F6B2E]">
-                      <button
-                        type="button"
-                        onClick={() => setPreviewBerkas(previewBerkas === b.jenis ? null : b.jenis)}
-                        className="hover:underline"
-                      >
-                        {previewBerkas === b.jenis ? "Tutup Preview" : "Preview"}
-                      </button>
-                      
-                      <a
-                        href={b.download_url || b.preview_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="hover:underline"
-                      >
-                        Download
-                      </a>
-                    </div>
+      <Field id="r-instansi" label="Nama instansi / perusahaan" optional>
+        <TextInput
+          id="r-instansi"
+          theme={inputTheme}
+          value={item.instansi || "-"}
+          readOnly
+          color="gray"
+          className="cursor-default"
+        />
+      </Field>
 
-                    {/* Area Preview yang muncul di bawah baris jika tombol Preview diklik */}
-                    {previewBerkas === b.jenis && (
-                      <div className="mt-4 w-full overflow-hidden rounded-xl border border-[#BAC8B1] bg-white">
-                        {["jpg", "jpeg", "png", "gif", "webp"].includes(b.ekstensi) ? (
-                          <img
-                            src={b.preview_url}
-                            alt={b.label}
-                            className="max-h-[520px] w-full bg-white object-contain"
-                          />
-                        ) : (
-                          <iframe
-                            src={`${b.preview_url}#toolbar=0&navpanes=0&view=FitH`}
-                            title={b.label}
-                            className="h-[640px] w-full"
-                          />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm opacity-70">
-                Berkas belum tersedia untuk dilihat.
-              </p>
-            )}
-          </div>
-        )}
+      <Field id="r-alamat" label="Alamat instansi" optional>
+        <Textarea
+          id="r-alamat"
+          theme={textareaTheme}
+          rows={3}
+          value={item.alamat}
+          readOnly
+          color="gray"
+          className="cursor-default"
+        />
+      </Field>
+
+      <div className="grid gap-x-4 sm:grid-cols-2">
+        <Field id="r-mulai" label="Tanggal mulai" optional>
+          <TextInput
+            id="r-mulai"
+            theme={inputTheme}
+            value={formatTanggal(item.tanggal_mulai)}
+            readOnly
+            color="gray"
+            className="cursor-default"
+          />
+        </Field>
+        <Field id="r-selesai" label="Tanggal selesai" optional>
+          <TextInput
+            id="r-selesai"
+            theme={inputTheme}
+            value={formatTanggal(item.tanggal_selesai)}
+            readOnly
+            color="gray"
+            className="cursor-default"
+          />
+        </Field>
       </div>
+
+      {tempat2 && (
+        <div className="mb-4 rounded-lg border border-[#BAC8B1] p-4">
+          <p className="mb-2 text-sm font-semibold">Tempat magang 2</p>
+          <Field id="r-instansi-2" label="Nama instansi / perusahaan" optional>
+            <TextInput
+              id="r-instansi-2"
+              theme={inputTheme}
+              value={tempat2.instansi || "-"}
+              readOnly
+              color="gray"
+              className="cursor-default"
+            />
+          </Field>
+          <Field id="r-alamat-2" label="Alamat instansi" optional>
+            <Textarea
+              id="r-alamat-2"
+              theme={textareaTheme}
+              rows={3}
+              value={tempat2.alamat_instansi}
+              readOnly
+              color="gray"
+              className="cursor-default"
+            />
+          </Field>
+          <div className="grid gap-x-4 sm:grid-cols-2">
+            <Field id="r-mulai-2" label="Tanggal mulai" optional>
+              <TextInput
+                id="r-mulai-2"
+                theme={inputTheme}
+                value={formatTanggal(tempat2.tanggal_mulai)}
+                readOnly
+                color="gray"
+                className="cursor-default"
+              />
+            </Field>
+            <Field id="r-selesai-2" label="Tanggal selesai" optional>
+              <TextInput
+                id="r-selesai-2"
+                theme={inputTheme}
+                value={formatTanggal(tempat2.tanggal_selesai)}
+                readOnly
+                color="gray"
+                className="cursor-default"
+              />
+            </Field>
+          </div>
+        </div>
+      )}
+
+      <div className="mb-2 mt-2 font-semibold">Surat dan berkas</div>
+
+      {berkas.length > 0 ? (
+        <div className="space-y-3">
+          {berkas.map((b) => (
+            <BerkasBaris
+              key={b.jenis}
+              berkas={b}
+              terbuka={Boolean(terbuka[b.jenis])}
+              onToggle={() =>
+                setTerbuka((t) => ({ ...t, [b.jenis]: !t[b.jenis] }))
+              }
+            />
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm opacity-70">
+          Berkas belum tersedia untuk dilihat.
+        </p>
+      )}
     </div>
   );
 }
@@ -787,8 +749,12 @@ export default function FormPengajuan() {
   const [disetujui, setDisetujui] = useState(false);
   const [menyetujui, setMenyetujui] = useState(false);
   const [versiPreview, setVersiPreview] = useState(0);
-  // Satu entri per surat (satu surat per instansi); semuanya tampil bersamaan
-  const [previews, setPreviews] = useState([]);
+  const [preview, setPreview] = useState({
+    src: "",
+    srcDoc: "",
+    loading: false,
+    error: "",
+  });
 
   // Riwayat pengajuan yang sudah dikirim
   const [riwayat, setRiwayat] = useState([]);
@@ -801,9 +767,6 @@ export default function FormPengajuan() {
   const [memuatDetail, setMemuatDetail] = useState(false);
 
   const tampilRiwayat = riwayat.length > 0 && !buatBaru;
-
-  // Banyaknya surat = banyaknya instansi (1 atau 2)
-  const jumlahSurat = form.tempat2 ? 2 : 1;
 
   // Pengajuan yang masih berjalan (menunggu / perlu revisi): tidak boleh membuat pengajuan baru
   const adaBerjalan = riwayat.some(
@@ -885,57 +848,41 @@ export default function FormPengajuan() {
     };
   }, [pilihId, tampilRiwayat]);
 
-  // Preview semua surat di langkah tanda tangan (instansi 1 dan 2 dimuat bersamaan)
   useEffect(() => {
     if (step !== 2 || !pengajuanId.current) return;
     let batal = false;
-    const objectUrls = [];
+    let objectUrl = "";
 
-    const ubahSurat = (index, nilai) =>
-      setPreviews((prev) => prev.map((p, i) => (i === index ? nilai : p)));
-
-    setPreviews(
-      Array.from({ length: jumlahSurat }, () => ({
-        src: "",
-        srcDoc: "",
-        loading: true,
-        error: "",
-      })),
-    );
-
-    for (let urutan = 1; urutan <= jumlahSurat; urutan += 1) {
-      const index = urutan - 1;
-
-      ambilPreview(pengajuanId.current, urutan)
-        .then((hasil) => {
-          if (batal) {
-            if (hasil.objectUrl) URL.revokeObjectURL(hasil.objectUrl);
-            return;
-          }
-          if (hasil.objectUrl) objectUrls.push(hasil.objectUrl);
-          ubahSurat(index, {
-            src: hasil.src || "",
-            srcDoc: hasil.srcDoc || "",
-            loading: false,
-            error: "",
-          });
-        })
-        .catch((err) => {
-          if (!batal)
-            ubahSurat(index, {
-              src: "",
-              srcDoc: "",
-              loading: false,
-              error: pesanDariError(err),
-            });
+    setPreview({ src: "", srcDoc: "", loading: true, error: "" });
+    ambilPreview(pengajuanId.current)
+      .then((hasil) => {
+        if (batal) {
+          if (hasil.objectUrl) URL.revokeObjectURL(hasil.objectUrl);
+          return;
+        }
+        objectUrl = hasil.objectUrl || "";
+        setPreview({
+          src: hasil.src || "",
+          srcDoc: hasil.srcDoc || "",
+          loading: false,
+          error: "",
         });
-    }
+      })
+      .catch((err) => {
+        if (!batal)
+          setPreview({
+            src: "",
+            srcDoc: "",
+            loading: false,
+            error: pesanDariError(err),
+          });
+      });
 
     return () => {
       batal = true;
-      objectUrls.forEach((u) => URL.revokeObjectURL(u));
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [step, versiPreview, jumlahSurat]);
+  }, [step, versiPreview]);
 
   const update = (field) => (e) => {
     let value = e.target.files ? e.target.files[0] || null : e.target.value;
@@ -1260,7 +1207,7 @@ export default function FormPengajuan() {
     setErrors({});
     setMsg(null);
     setDisetujui(false);
-    setPreviews([]);
+    setPreview({ src: "", srcDoc: "", loading: false, error: "" });
     setVersiForm((v) => v + 1);
     setSedangRevisi(null);
     setBuatBaru(true);
@@ -1288,7 +1235,7 @@ export default function FormPengajuan() {
     setErrors({});
     setMsg(null);
     setDisetujui(Boolean(item.sudah_ditandatangani));
-    setPreviews([]);
+    setPreview({ src: "", srcDoc: "", loading: false, error: "" });
     setVersiForm((v) => v + 1);
     setSedangRevisi({ id: item.id, catatan: item.catatan_revisi || "" });
     setBuatBaru(true);
@@ -1482,7 +1429,7 @@ export default function FormPengajuan() {
                           value={form.nama}
                           onChange={update("nama")}
                           readOnly
-                          className="cursor-not-allowed"
+                          className="cursor-not-allowed opacity-80"
                           color={errors.nama ? "failure" : "gray"}
                         />
                       </Field>
@@ -1493,7 +1440,7 @@ export default function FormPengajuan() {
                           value={form.nim}
                           onChange={update("nim")}
                           readOnly
-                          className="cursor-not-allowed"
+                          className="cursor-not-allowed opacity-80"
                           maxLength={11}
                           color={errors.nim ? "failure" : "gray"}
                         />
@@ -1509,7 +1456,7 @@ export default function FormPengajuan() {
                         theme={inputTheme}
                         value={form.departemen}
                         readOnly
-                        className="cursor-not-allowed"
+                        className="cursor-not-allowed opacity-80"
                         color={errors.departemen ? "failure" : "gray"}
                       />
                     </Field>
@@ -1853,83 +1800,52 @@ export default function FormPengajuan() {
 
                 {step === 2 && (
                   <div>
-                    {jumlahSurat > 1 && (
-                      <p className="mb-4 text-sm opacity-80">
-                        Pengajuanmu memiliki {jumlahSurat} surat, satu untuk
-                        tiap instansi. Periksa semuanya sebelum menyetujui;
-                        satu persetujuan berlaku untuk semua surat.
-                      </p>
-                    )}
-
-                    {/* Semua surat langsung tampil berurutan (tanpa tab) */}
-                    {previews.map((p, i) => {
-                      const namaInstansi =
-                        i === 0 ? form.instansi : form.tempat2?.instansi;
-
-                      return (
-                        <div key={i} className="mb-6">
-                          {jumlahSurat > 1 && (
-                            <p className="mb-2 text-sm font-semibold">
-                              Surat {i + 1} dari {jumlahSurat}
-                              {namaInstansi?.trim()
-                                ? ` · ${namaInstansi.trim()}`
-                                : ""}
-                            </p>
-                          )}
-
-                          <div className="overflow-hidden rounded-lg border border-[#BAC8B1] bg-white">
-                            {p.loading && (
-                              <p className="p-6 text-sm">
-                                Memuat preview surat...
-                              </p>
-                            )}
-                            {p.error && (
-                              <div className="p-6">
-                                <p className="text-sm font-medium text-[#b42318]">
-                                  {p.error}
-                                </p>
-                                <button
-                                  type="button"
-                                  onClick={() => setVersiPreview((v) => v + 1)}
-                                  className="mt-2 text-sm font-semibold underline hover:text-[#7B9669]"
-                                >
-                                  Muat ulang preview
-                                </button>
-                              </div>
-                            )}
-                            {!p.loading &&
-                              !p.error &&
-                              (p.src || p.srcDoc) && (
-                                <iframe
-                                  title={`Preview surat ${i + 1}`}
-                                  src={
-                                    p.src
-                                      ? `${p.src}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`
-                                      : undefined
-                                  }
-                                  srcDoc={p.srcDoc || undefined}
-                                  className="w-full rounded-lg border border-[#BAC8B1] bg-white"
-                                  style={{ minHeight: 600 }}
-                                  onLoad={(e) => {
-                                    const doc = e.target.contentDocument;
-                                    if (doc && p.srcDoc) {
-                                      e.target.style.height =
-                                        doc.documentElement.scrollHeight + "px";
-                                    }
-                                  }}
-                                />
-                              )}
-                          </div>
+                    <div className="mb-4 overflow-hidden rounded-lg border border-[#BAC8B1] bg-white">
+                      {preview.loading && (
+                        <p className="p-6 text-sm">Memuat preview surat...</p>
+                      )}
+                      {preview.error && (
+                        <div className="p-6">
+                          <p className="text-sm font-medium text-[#b42318]">
+                            {preview.error}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setVersiPreview((v) => v + 1)}
+                            className="mt-2 text-sm font-semibold underline hover:text-[#7B9669]"
+                          >
+                            Muat ulang preview
+                          </button>
                         </div>
-                      );
-                    })}
+                      )}
+                      {!preview.loading &&
+                        !preview.error &&
+                        (preview.src || preview.srcDoc) && (
+                          <iframe
+                            title="Preview surat"
+                            src={
+                              preview.src
+                                ? `${preview.src}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`
+                                : undefined
+                            }
+                            srcDoc={preview.srcDoc || undefined}
+                            className="w-full rounded-lg border border-[#BAC8B1] bg-white"
+                            style={{ minHeight: 600 }}
+                            onLoad={(e) => {
+                              const doc = e.target.contentDocument;
+                              if (doc && preview.srcDoc) {
+                                e.target.style.height =
+                                  doc.documentElement.scrollHeight + "px";
+                              }
+                            }}
+                          />
+                        )}
+                    </div>
 
                     <Field id="ttd" label="Persetujuan" error={errors.ttd}>
                       <p className="mb-3 text-sm">
-                        Periksa isi {jumlahSurat > 1 ? "kedua surat" : "surat"}{" "}
-                        di atas. Tekan Setujui untuk menandatangani{" "}
-                        {jumlahSurat > 1 ? "semua surat" : "surat"} dengan QR
-                        code.
+                        Periksa isi surat di atas. Tekan Setujui untuk
+                        menandatangani surat dengan QR code.
                       </p>
                       <div className="flex flex-wrap items-center gap-2">
                         {disetujui ? (
@@ -1950,9 +1866,7 @@ export default function FormPengajuan() {
                             type="button"
                             onClick={setujui}
                             disabled={
-                              menyetujui ||
-                              previews.length === 0 ||
-                              previews.some((p) => p.loading || p.error)
+                              menyetujui || preview.loading || !!preview.error
                             }
                             className="w-fit border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
                           >
