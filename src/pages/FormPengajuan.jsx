@@ -8,7 +8,7 @@ import {
   TextInput,
 } from "flowbite-react";
 
-const API = "http://172.18.160.149:8000/api";
+const API = "http://172.18.160.171:8000/api";
 const ENDPOINT = {
   buat: "/pengajuan-magang", // POST = buat pengajuan, GET = daftar pengajuan milik mahasiswa
   ubah: (id) => `/pengajuan-magang/${id}`, // PUT = ubah, GET = detail
@@ -474,17 +474,18 @@ function BerkasBaris({ berkas, terbuka, onToggle }) {
 
 // Tampilan riwayat: isi formulir yang sama, hanya dibaca (tidak bisa diubah)
 function FormRiwayat({ item, memuatDetail }) {
-  const [terbuka, setTerbuka] = useState({});
+  const [activeTab, setActiveTab] = useState("data_diri");
+  // State untuk melacak berkas mana yang sedang di-preview (jika menggunakan iframe/gambar di dalam halaman)
+  const [previewBerkas, setPreviewBerkas] = useState(null);
 
   const anggota = Array.isArray(item.anggota) ? item.anggota : [];
-
   const tempat2 = ambilTempat2(item);
 
   const berkasServer = item.daftarBerkas.filter(
-    (b) => b.jenis !== "surat-magang" || item.status === "setuju",
+    (b) => b.jenis !== "surat-magang" || item.status === "setuju"
   );
 
-  // Berkas yang baru saja diunggah di perangkat ini (dipakai jika server belum mengirim tautan berkas)
+  // Berkas yang baru saja diunggah di perangkat ini
   const berkasLokal = (Array.isArray(item.berkasLokal) ? item.berkasLokal : [])
     .filter((l) => !berkasServer.some((b) => b.jenis === l.jenis))
     .map((l) => ({
@@ -499,17 +500,18 @@ function FormRiwayat({ item, memuatDetail }) {
 
   return (
     <div className="p-6 sm:p-8">
+      {/* Header Riwayat */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="font-bold">Pengajuan #{item.id}</p>
-          <p className="text-xs opacity-70">
+          <p className="font-bold text-lg">Pengajuan - {item.nama}</p>
+          <p className="text-xs text-gray-500">
             Dikirim {formatTanggal(item.dikirim)}
           </p>
         </div>
-
         <StatusBadge status={item.status} />
       </div>
 
+      {/* Stepper Horizontal */}
       <Stepper step={STEPS.length} />
 
       {memuatDetail && (
@@ -538,180 +540,198 @@ function FormRiwayat({ item, memuatDetail }) {
         </div>
       )}
 
-      <div className="grid gap-x-4 sm:grid-cols-2">
-        <Field id="r-nama" label="Nama lengkap" optional>
-          <TextInput
-            id="r-nama"
-            theme={inputTheme}
-            value={item.nama}
-            readOnly
-            color="gray"
-            className="cursor-default"
-          />
-        </Field>
-        <Field id="r-nim" label="NIM" optional>
-          <TextInput
-            id="r-nim"
-            theme={inputTheme}
-            value={item.nim}
-            readOnly
-            color="gray"
-            className="cursor-default"
-          />
-        </Field>
+      {/* Navigasi Tab */}
+      <div className="mb-6 flex gap-6 border-b border-[#BAC8B1]">
+        {[
+          { id: "data_diri", label: "Data diri" },
+          { id: "tempat_magang", label: "Tempat magang" },
+          { id: "berkas", label: "Berkas" },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
+            className={`pb-2 text-sm font-semibold transition ${
+              activeTab === tab.id
+                ? "border-b-2 border-[#404E3B] text-[#404E3B]"
+                : "text-[#7B9669] hover:text-[#404E3B]"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      <Field id="r-dep" label="Departemen / program studi" optional>
-        <TextInput
-          id="r-dep"
-          theme={inputTheme}
-          value={item.departemen}
-          readOnly
-          color="gray"
-          className="cursor-default"
-        />
-      </Field>
+      {/* Konten Berdasarkan Tab */}
+      <div className="space-y-6">
+        {/* --- TAB DATA DIRI --- */}
+        {activeTab === "data_diri" && (
+          <div>
+            {/* Pengirim (Nama, NIM, Departemen sejajar) */}
+            <div className="mb-6 grid gap-x-4 sm:grid-cols-3">
+              <div>
+                <p className="text-xs text-gray-500">Nama lengkap</p>
+                <p className="font-semibold">{item.nama}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">NIM</p>
+                <p className="font-semibold">{item.nim}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Departemen</p>
+                <p className="font-semibold">{item.departemen}</p>
+              </div>
+            </div>
 
-      {anggota.length > 0 && (
-        <div className="mb-4">
-          <span className="mb-2 block text-sm font-semibold">
-            Anggota kelompok ({anggota.length + 1} orang)
-          </span>
-          <div className="space-y-2">
-            {anggota.map((a, i) => (
-              <div
-                key={i}
-                className="grid gap-x-4 rounded-lg border border-[#BAC8B1] p-3 sm:grid-cols-2"
-              >
-                <div>
-                  <p className="text-xs opacity-70">Anggota {i + 2}</p>
-                  <p className="text-sm font-semibold">{a.nama}</p>
+            {/* Anggota Kelompok (Tanpa Border) */}
+            {anggota.length > 0 && (
+              <div>
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-sm font-semibold">Anggota kelompok</p>
+                  <span className="text-xs text-gray-500">
+                    {anggota.length + 1} orang
+                  </span>
                 </div>
-                <div>
-                  <p className="text-xs opacity-70">NIM</p>
-                  <p className="text-sm font-semibold">{a.nim}</p>
+                <div className="space-y-4">
+                  {anggota.map((a, i) => (
+                    <div key={i} className="grid gap-x-4 sm:grid-cols-3">
+                      <div>
+                        <p className="text-xs text-gray-500">Nama anggota</p>
+                        <p className="font-semibold">{a.nama}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">NIM</p>
+                        <p className="font-semibold">{a.nim}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Departemen</p>
+                        <p className="font-semibold">
+                          {namaDep(departemenDariNim(a.nim)) || "-"}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))}
+            )}
           </div>
-        </div>
-      )}
+        )}
 
-      <Field id="r-instansi" label="Nama instansi / perusahaan" optional>
-        <TextInput
-          id="r-instansi"
-          theme={inputTheme}
-          value={item.instansi || "-"}
-          readOnly
-          color="gray"
-          className="cursor-default"
-        />
-      </Field>
+        {/* --- TAB TEMPAT MAGANG --- */}
+        {activeTab === "tempat_magang" && (
+          <div className="space-y-4">
+            {/* Tempat Magang 1 */}
+            <div className="rounded-xl border border-[#BAC8B1] bg-[#F4F8F2] p-5">
+              <p className="mb-4 font-bold text-[#404E3B]">Tempat magang 1</p>
+              
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs text-gray-500">Instansi</p>
+                  <p className="font-semibold text-[#404E3B]">{item.instansi || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Periode</p>
+                  <p className="font-semibold text-[#404E3B]">
+                    {formatTanggal(item.tanggal_mulai)} – {formatTanggal(item.tanggal_selesai)}
+                  </p>
+                </div>
+                <div className="sm:col-span-2">
+                  <p className="text-xs text-gray-500">Alamat</p>
+                  <p className="whitespace-pre-line font-semibold text-[#404E3B]">
+                    {item.alamat || "-"}
+                  </p>
+                </div>
+              </div>
+            </div>
 
-      <Field id="r-alamat" label="Alamat instansi" optional>
-        <Textarea
-          id="r-alamat"
-          theme={textareaTheme}
-          rows={3}
-          value={item.alamat}
-          readOnly
-          color="gray"
-          className="cursor-default"
-        />
-      </Field>
+            {/* Tempat Magang 2 */}
+            {tempat2 && (
+              <div className="rounded-xl border border-[#BAC8B1] bg-[#F4F8F2] p-5">
+                <p className="mb-4 font-bold text-[#404E3B]">Tempat magang 2</p>
+                
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs text-gray-500">Instansi</p>
+                    <p className="font-semibold text-[#404E3B]">{tempat2.instansi || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Periode</p>
+                    <p className="font-semibold text-[#404E3B]">
+                      {formatTanggal(tempat2.tanggal_mulai)} – {formatTanggal(tempat2.tanggal_selesai)}
+                    </p>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <p className="text-xs text-gray-500">Alamat</p>
+                    <p className="whitespace-pre-line font-semibold text-[#404E3B]">
+                      {tempat2.alamat_instansi || "-"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
-      <div className="grid gap-x-4 sm:grid-cols-2">
-        <Field id="r-mulai" label="Tanggal mulai" optional>
-          <TextInput
-            id="r-mulai"
-            theme={inputTheme}
-            value={formatTanggal(item.tanggal_mulai)}
-            readOnly
-            color="gray"
-            className="cursor-default"
-          />
-        </Field>
-        <Field id="r-selesai" label="Tanggal selesai" optional>
-          <TextInput
-            id="r-selesai"
-            theme={inputTheme}
-            value={formatTanggal(item.tanggal_selesai)}
-            readOnly
-            color="gray"
-            className="cursor-default"
-          />
-        </Field>
+        {/* --- TAB BERKAS --- */}
+        {activeTab === "berkas" && (
+          <div>
+            {berkas.length > 0 ? (
+              <div className="flex flex-col">
+                {berkas.map((b) => (
+                  <div
+                    key={b.jenis}
+                    className="flex flex-wrap items-center justify-between gap-3 border-b border-[#BAC8B1] py-4 text-sm last:border-0"
+                  >
+                    <strong className="text-[#404E3B]">{b.label}</strong>
+                    
+                    <div className="flex items-center gap-4 font-semibold text-[#1F6B2E]">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewBerkas(previewBerkas === b.jenis ? null : b.jenis)}
+                        className="hover:underline"
+                      >
+                        {previewBerkas === b.jenis ? "Tutup Preview" : "Preview"}
+                      </button>
+                      
+                      <a
+                        href={b.download_url || b.preview_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hover:underline"
+                      >
+                        Download
+                      </a>
+                    </div>
+
+                    {/* Area Preview yang muncul di bawah baris jika tombol Preview diklik */}
+                    {previewBerkas === b.jenis && (
+                      <div className="mt-4 w-full overflow-hidden rounded-xl border border-[#BAC8B1] bg-white">
+                        {["jpg", "jpeg", "png", "gif", "webp"].includes(b.ekstensi) ? (
+                          <img
+                            src={b.preview_url}
+                            alt={b.label}
+                            className="max-h-[520px] w-full bg-white object-contain"
+                          />
+                        ) : (
+                          <iframe
+                            src={`${b.preview_url}#toolbar=0&navpanes=0&view=FitH`}
+                            title={b.label}
+                            className="h-[640px] w-full"
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm opacity-70">
+                Berkas belum tersedia untuk dilihat.
+              </p>
+            )}
+          </div>
+        )}
       </div>
-
-      {tempat2 && (
-        <div className="mb-4 rounded-lg border border-[#BAC8B1] p-4">
-          <p className="mb-2 text-sm font-semibold">Tempat magang 2</p>
-          <Field id="r-instansi-2" label="Nama instansi / perusahaan" optional>
-            <TextInput
-              id="r-instansi-2"
-              theme={inputTheme}
-              value={tempat2.instansi || "-"}
-              readOnly
-              color="gray"
-              className="cursor-default"
-            />
-          </Field>
-          <Field id="r-alamat-2" label="Alamat instansi" optional>
-            <Textarea
-              id="r-alamat-2"
-              theme={textareaTheme}
-              rows={3}
-              value={tempat2.alamat_instansi}
-              readOnly
-              color="gray"
-              className="cursor-default"
-            />
-          </Field>
-          <div className="grid gap-x-4 sm:grid-cols-2">
-            <Field id="r-mulai-2" label="Tanggal mulai" optional>
-              <TextInput
-                id="r-mulai-2"
-                theme={inputTheme}
-                value={formatTanggal(tempat2.tanggal_mulai)}
-                readOnly
-                color="gray"
-                className="cursor-default"
-              />
-            </Field>
-            <Field id="r-selesai-2" label="Tanggal selesai" optional>
-              <TextInput
-                id="r-selesai-2"
-                theme={inputTheme}
-                value={formatTanggal(tempat2.tanggal_selesai)}
-                readOnly
-                color="gray"
-                className="cursor-default"
-              />
-            </Field>
-          </div>
-        </div>
-      )}
-
-      <div className="mb-2 mt-2 font-semibold">Surat dan berkas</div>
-
-      {berkas.length > 0 ? (
-        <div className="space-y-3">
-          {berkas.map((b) => (
-            <BerkasBaris
-              key={b.jenis}
-              berkas={b}
-              terbuka={Boolean(terbuka[b.jenis])}
-              onToggle={() =>
-                setTerbuka((t) => ({ ...t, [b.jenis]: !t[b.jenis] }))
-              }
-            />
-          ))}
-        </div>
-      ) : (
-        <p className="text-sm opacity-70">
-          Berkas belum tersedia untuk dilihat.
-        </p>
-      )}
     </div>
   );
 }
