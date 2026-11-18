@@ -134,6 +134,10 @@ function nomorWa(hp) {
 const INPUT =
   "w-full rounded-lg border border-[#BAC8B1] bg-white px-3 py-2.5 text-sm font-semibold text-[#404E3B] outline-none focus:border-[#404E3B] focus:ring-2 focus:ring-[#BAC8B1] disabled:opacity-60";
 
+// Gaya tombol WhatsApp (dipakai tombol kontak biasa dan tombol kirim surat)
+const TOMBOL_WA =
+  "inline-flex rounded-lg border border-[#404E3B] px-4 py-2 text-sm font-bold text-[#404E3B] transition hover:bg-[#404E3B] hover:text-[#E6E6E6] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B9669] disabled:cursor-not-allowed disabled:opacity-60";
+
 // Kartu pengelompok form: judul + isi
 function Section({ judul, keterangan, children }) {
   return (
@@ -169,12 +173,53 @@ function Kolom({ label, edit, value, children, className = "" }) {
   );
 }
 
+// Popup di dalam aplikasi (pengganti window.confirm / window.prompt bawaan browser).
+// Tutup dengan tombol Batal, klik area gelap, atau tombol Esc.
+function Dialog({ judul, onClose, children }) {
+  useEffect(() => {
+    const tekanTombol = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+
+    window.addEventListener("keydown", tekanTombol);
+
+    return () => window.removeEventListener("keydown", tekanTombol);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={judul}
+        className="w-full max-w-md rounded-2xl bg-white p-6 text-[#404E3B] shadow-2xl"
+      >
+        <h2 className="text-lg font-bold">{judul}</h2>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sukses, setSukses] = useState("");
 
+  // BARU: urutan surat (1/2) yang sedang dibuatkan link WhatsApp-nya, null bila tidak ada
+  const [waBusy, setWaBusy] = useState(null);
+
   const [form, setForm] = useState(() => formAwal(item));
+
+  // Popup yang sedang terbuka: "verifikasi" | "revisi" | "keluar" | null
+  const [dialog, setDialog] = useState(null);
+  const [catatan, setCatatan] = useState("");
+  const [errCatatan, setErrCatatan] = useState("");
 
   const status = normalisasiStatus(item.status);
   const verified = status === "terverifikasi";
@@ -184,11 +229,15 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
   const hp = cariNilai(item, KEY_HP);
   const email = cariNilai(item, KEY_EMAIL);
   const tujuanWa = nomorWa(hp);
+
+  // Link kontak biasa (sapaan singkat). Hanya dipakai SEBELUM pengajuan diverifikasi.
+  // Setelah diverifikasi, pesan dibuat backend lewat kirimSuratWa().
   const linkWa = tujuanWa
     ? `https://wa.me/${tujuanWa}?text=${encodeURIComponent(
-        `Halo ${item.nama}, kami dari admin magang Fakultas Kehutanan dan Lingkungan IPB terkait pengajuan magang Anda (#${item.id}).`
+        `Halo ${item.nama}, kami dari admin magang Fakultas Kehutanan dan Lingkungan IPB terkait pengajuan magang Anda.`
       )}`
     : "";
+
   const suratMagang = item.daftarBerkas.find((b) => b.jenis === "surat-magang");
   const suratMagang2 = item.daftarBerkas.find(
     (b) => b.jenis === "surat-magang-kedua"
@@ -389,25 +438,78 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
     }
   }
 
-  function verifikasi() {
-    const yakin = window.confirm(
-      "Verifikasi pengajuan ini? Nomor surat dibuat otomatis dan keputusan tidak dapat dibatalkan."
-    );
+  // BARU: minta backend membuat pesan + link unduh sementara, lalu buka WhatsApp.
+  // Pesan TIDAK terkirim otomatis: admin menekan kirim sendiri di WhatsApp.
+  // urutan: 1 = surat instansi pertama, 2 = surat instansi kedua.
+  async function kirimSuratWa(urutan) {
+    setError("");
+    setSukses("");
 
-    if (yakin) kirimStatus({ status: "setuju" });
+    // Buka tab SEKARANG (masih di dalam klik) supaya tidak diblokir popup blocker.
+    const tab = window.open("", "_blank");
+
+    setWaBusy(urutan);
+
+    try {
+      const response = await panggilApi(ENDPOINT.whatsapp(item.id, urutan), {
+        method: "POST",
+      });
+
+      // Tahan terhadap dua bentuk respons: {data:{...}} atau {data:{data:{...}}}
+      const hasil = response?.data ?? response;
+      const url = hasil?.whatsapp_url ?? hasil?.data?.whatsapp_url;
+
+      if (!url) {
+        throw new Error("Respons server tidak berisi link WhatsApp.");
+      }
+
+      if (tab) {
+        tab.location.href = url;
+      } else {
+        window.open(url, "_blank");
+      }
+
+      setSukses(
+        "WhatsApp dibuka dengan pesan yang sudah terisi. Tekan kirim di WhatsApp untuk mengirimnya."
+      );
+    } catch (err) {
+      tab?.close();
+      setError(err.message || "Gagal membuat link WhatsApp.");
+    } finally {
+      setWaBusy(null);
+    }
+  }
+
+  // ---------- Popup verifikasi / revisi / keluar ----------
+  function verifikasi() {
+    setDialog("verifikasi");
+  }
+
+  function konfirmasiVerifikasi() {
+    setDialog(null);
+    kirimStatus({ status: "setuju" });
   }
 
   function tolak() {
-    const alasan = window.prompt("Catatan revisi untuk mahasiswa (wajib diisi):");
+    setCatatan("");
+    setErrCatatan("");
+    setDialog("revisi");
+  }
 
-    if (alasan === null) return;
+  function konfirmasiRevisi() {
+    const alasan = catatan.trim();
 
-    if (!alasan.trim()) {
-      setError("Catatan revisi wajib diisi.");
+    if (!alasan) {
+      setErrCatatan("Catatan revisi wajib diisi.");
       return;
     }
 
-    kirimStatus({ status: "revisi", catatan: alasan.trim() });
+    setDialog(null);
+    kirimStatus({ status: "revisi", catatan: alasan });
+  }
+
+  function tutupDialog() {
+    setDialog(null);
   }
 
   // sufiks "" = instansi 1, "2" = instansi 2 (sesuai key di form)
@@ -467,7 +569,8 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
   }
 
   function kembali() {
-    if (berubah && !window.confirm("Ada perubahan yang belum disimpan. Tetap kembali?")) {
+    if (berubah) {
+      setDialog("keluar");
       return;
     }
 
@@ -482,7 +585,7 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
           <Button onClick={kembali}>← Kembali</Button>
 
           <h1 className="truncate font-bold">
-            Pengajuan #{item.id} — {item.nama}
+            Pengajuan — {item.nama}
           </h1>
         </div>
       </header>
@@ -528,15 +631,59 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
               <span className="tabular-nums">{hp || "-"}</span>
             </div>
 
-            {linkWa && (
+            {/* Sebelum diverifikasi: kontak biasa */}
+            {!verified && linkWa && (
               <a
                 href={linkWa}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-1 inline-flex rounded-lg border border-[#404E3B] px-4 py-2 text-sm font-bold text-[#404E3B] transition hover:bg-[#404E3B] hover:text-[#E6E6E6] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B9669]"
+                className={`mt-1 ${TOMBOL_WA}`}
               >
                 Hubungi via WhatsApp
               </a>
+            )}
+
+            {/* BARU: setelah diverifikasi, kirim surat via WhatsApp (pesan dibuat backend) */}
+            {verified && (suratMagang || suratMagang2) && (
+              <div className="mt-1 flex flex-wrap gap-2">
+                {suratMagang && (
+                  <button
+                    type="button"
+                    onClick={() => kirimSuratWa(1)}
+                    disabled={waBusy !== null || !tujuanWa}
+                    title={
+                      tujuanWa
+                        ? undefined
+                        : "Mahasiswa belum memiliki nomor WhatsApp"
+                    }
+                    className={TOMBOL_WA}
+                  >
+                    {waBusy === 1
+                      ? "Membuat link..."
+                      : item.tempat2
+                      ? "Kirim surat instansi 1 via WhatsApp"
+                      : "Kirim surat via WhatsApp"}
+                  </button>
+                )}
+
+                {suratMagang2 && (
+                  <button
+                    type="button"
+                    onClick={() => kirimSuratWa(2)}
+                    disabled={waBusy !== null || !tujuanWa}
+                    title={
+                      tujuanWa
+                        ? undefined
+                        : "Mahasiswa belum memiliki nomor WhatsApp"
+                    }
+                    className={TOMBOL_WA}
+                  >
+                    {waBusy === 2
+                      ? "Membuat link..."
+                      : "Kirim surat instansi 2 via WhatsApp"}
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -559,47 +706,47 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
         >
           <div className="space-y-4">
             {adaKelompok && <h3 className="text-sm font-bold">Ketua kelompok</h3>}
-          <div className="grid gap-4 md:grid-cols-2">
-            <Kolom label="Nama" edit={edit} value={item.nama}>
-              <input
-                className={INPUT}
-                value={form.nama}
-                onChange={ubah("nama")}
-                disabled={busy}
-              />
-            </Kolom>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Kolom label="Nama" edit={edit} value={item.nama}>
+                <input
+                  className={INPUT}
+                  value={form.nama}
+                  onChange={ubah("nama")}
+                  disabled={busy}
+                />
+              </Kolom>
 
-            <Kolom label="NIM" edit={edit} value={item.nim}>
-              <input
-                className={INPUT}
-                value={form.nim}
-                onChange={ubahNim}
-                maxLength={11}
-                disabled={busy}
-              />
-            </Kolom>
+              <Kolom label="NIM" edit={edit} value={item.nim}>
+                <input
+                  className={INPUT}
+                  value={form.nim}
+                  onChange={ubahNim}
+                  maxLength={11}
+                  disabled={busy}
+                />
+              </Kolom>
 
-            <Kolom
-              label="Departemen"
-              edit={edit}
-              value={item.departemen}
-              className="md:col-span-2"
-            >
-              <select
-                className={INPUT}
-                value={form.departemen}
-                onChange={ubah("departemen")}
-                disabled={busy}
+              <Kolom
+                label="Departemen"
+                edit={edit}
+                value={item.departemen}
+                className="md:col-span-2"
               >
-                <option value="">Pilih departemen</option>
-                {pilihanDepartemen.map((dep) => (
-                  <option key={dep.kode} value={dep.kode}>
-                    {dep.nama}
-                  </option>
-                ))}
-              </select>
-            </Kolom>
-          </div>
+                <select
+                  className={INPUT}
+                  value={form.departemen}
+                  onChange={ubah("departemen")}
+                  disabled={busy}
+                >
+                  <option value="">Pilih departemen</option>
+                  {pilihanDepartemen.map((dep) => (
+                    <option key={dep.kode} value={dep.kode}>
+                      {dep.nama}
+                    </option>
+                  ))}
+                </select>
+              </Kolom>
+            </div>
           </div>
 
           {adaKelompok && (
@@ -608,7 +755,6 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
                 <h3 className="text-sm font-bold">
                   Anggota kelompok ({daftarAnggota.length} orang)
                 </h3>
-
               </div>
 
               {daftarAnggota.length === 0 && (
@@ -619,9 +765,7 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
                 <div
                   key={i}
                   className={`grid items-end gap-3 ${
-                    edit
-                      ? "md:grid-cols-2"
-                      : "md:grid-cols-3"
+                    edit ? "md:grid-cols-2" : "md:grid-cols-3"
                   }`}
                 >
                   <Kolom label={`Nama anggota ${i + 1}`} edit={edit} value={a.nama}>
@@ -646,7 +790,6 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
                   {!edit && (
                     <Kolom label="Departemen" edit={false} value={a.departemen} />
                   )}
-
                 </div>
               ))}
             </div>
@@ -696,18 +839,18 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
 
         {/* 3. Berkas */}
         <Section judul="3. Berkas">
-        {URUTAN_BERKAS.map((jenis) => {
-          const berkas = item.daftarBerkas.find((b) => b.jenis === jenis);
+          {URUTAN_BERKAS.map((jenis) => {
+            const berkas = item.daftarBerkas.find((b) => b.jenis === jenis);
 
-          if (berkas) return <FilePreview key={jenis} berkas={berkas} />;
-          if (BERKAS_OPSIONAL.includes(jenis)) return null;
+            if (berkas) return <FilePreview key={jenis} berkas={berkas} />;
+            if (BERKAS_OPSIONAL.includes(jenis)) return null;
 
-          return <BerkasKosong key={jenis} label={LABEL_BERKAS[jenis]} />;
-        })}
+            return <BerkasKosong key={jenis} label={LABEL_BERKAS[jenis]} />;
+          })}
 
-        {verified && suratMagang && <FilePreview berkas={suratMagang} />}
+          {verified && suratMagang && <FilePreview berkas={suratMagang} />}
 
-        {verified && suratMagang2 && <FilePreview berkas={suratMagang2} />}
+          {verified && suratMagang2 && <FilePreview berkas={suratMagang2} />}
         </Section>
 
         {sukses && (
@@ -782,6 +925,73 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
           )}
         </div>
       </div>
+
+      {/* POPUP */}
+      {dialog === "verifikasi" && (
+        <Dialog judul="Verifikasi pengajuan ini?" onClose={tutupDialog}>
+          <p className="mt-2 text-sm text-[#5b6b55]">
+            Nomor surat akan dibuat otomatis dan surat pengantar diterbitkan.
+            Keputusan ini tidak dapat dibatalkan.
+          </p>
+
+          <div className="mt-6 flex justify-end gap-2">
+            <Button onClick={tutupDialog}>Batal</Button>
+            <Button variant="primary" onClick={konfirmasiVerifikasi}>
+              Ya, verifikasi
+            </Button>
+          </div>
+        </Dialog>
+      )}
+
+      {dialog === "revisi" && (
+        <Dialog judul="Minta mahasiswa merevisi" onClose={tutupDialog}>
+          <label className="mt-3 flex flex-col gap-1.5 text-sm">
+            <span className="font-medium opacity-70">
+              Catatan revisi untuk mahasiswa (wajib diisi)
+            </span>
+
+            <textarea
+              autoFocus
+              rows={4}
+              maxLength={1000}
+              className={INPUT}
+              value={catatan}
+              onChange={(e) => {
+                setCatatan(e.target.value);
+                setErrCatatan("");
+              }}
+              placeholder="Tuliskan bagian yang perlu diperbaiki..."
+            />
+          </label>
+
+          {errCatatan && (
+            <p className="mt-1 text-xs font-medium text-red-700">{errCatatan}</p>
+          )}
+
+          <div className="mt-6 flex justify-end gap-2">
+            <Button onClick={tutupDialog}>Batal</Button>
+            <Button variant="danger" onClick={konfirmasiRevisi}>
+              Kirim revisi
+            </Button>
+          </div>
+        </Dialog>
+      )}
+
+      {dialog === "keluar" && (
+        <Dialog judul="Perubahan belum disimpan" onClose={tutupDialog}>
+          <p className="mt-2 text-sm text-[#5b6b55]">
+            Ada perubahan yang belum disimpan. Jika kembali sekarang,
+            perubahan itu akan hilang.
+          </p>
+
+          <div className="mt-6 flex justify-end gap-2">
+            <Button onClick={tutupDialog}>Tetap di sini</Button>
+            <Button variant="danger" onClick={onClose}>
+              Kembali tanpa menyimpan
+            </Button>
+          </div>
+        </Dialog>
+      )}
     </div>
   );
 }

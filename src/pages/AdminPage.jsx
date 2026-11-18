@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 const API = (
   import.meta.env.VITE_API_URL ||
-  "http://172.18.160.149:8000/api"
+  "http://192.168.0.104:8000/api"
 ).replace(/\/+$/, "");
 
 export const ENDPOINT = {
@@ -14,6 +14,9 @@ export const ENDPOINT = {
   // Metode edit (PATCH/PUT) diatur lewat METHOD_EDIT di DetailPage.jsx.
   edit: (id) => `/admin/pengajuan-magang/${id}`,
   status: (id) => `/admin/pengajuan-magang/${id}/status`,
+  // BARU: buat pesan + link unduh sementara untuk dikirim lewat WhatsApp (urutan 1 atau 2)
+  whatsapp: (id, urutan) =>
+    `/admin/pengajuan-magang/${id}/surat-magang/${urutan}/whatsapp`,
 };
 
 const PER_PAGE = 20;

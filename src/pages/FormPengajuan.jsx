@@ -8,11 +8,13 @@ import {
   TextInput,
 } from "flowbite-react";
 
-const API = "http://172.18.160.149:8000/api";
+const API = "http://192.168.0.104:8000/api";
 const ENDPOINT = {
   buat: "/pengajuan-magang", // POST = buat pengajuan, GET = daftar pengajuan milik mahasiswa
   ubah: (id) => `/pengajuan-magang/${id}`, // PUT = ubah, GET = detail
-  preview: (id) => `/pengajuan-magang/${id}/preview-surat`,
+  // urutan 1 = instansi pertama, 2 = instansi kedua
+  preview: (id, urutan = 1) =>
+    `/pengajuan-magang/${id}/preview-surat?urutan=${urutan}`,
   tandaTangan: (id) => `/pengajuan-magang/${id}/tanda-tangan`,
   kirim: (id) => `/pengajuan-magang/${id}/kirim`,
 };
@@ -124,8 +126,9 @@ const panggilApi = async (path, { json, formData, method = "POST" } = {}) => {
   return data;
 };
 
-const ambilPreview = async (id) => {
-  const response = await fetch(`${API}${ENDPOINT.preview(id)}`, {
+// Menerima urutan surat (1 = instansi pertama, 2 = instansi kedua)
+const ambilPreview = async (id, urutan = 1) => {
+  const response = await fetch(`${API}${ENDPOINT.preview(id, urutan)}`, {
     headers: authHeaders(),
   });
   const type = response.headers.get("content-type") || "";
@@ -250,13 +253,21 @@ const STATUS = {
 
 const LABEL_BERKAS = {
   "surat-pengajuan": "Surat pengajuan magang",
+  "surat-pengajuan-kedua": "Surat pengajuan magang (Instansi 2)",
   "bukti-spp": "Bukti pembayaran SPP",
   "surat-rekomendasi": "Surat rekomendasi",
   "surat-magang": "Surat pengantar magang (resmi)",
 };
 
+// Bila ada dua instansi, surat pertama diberi keterangan "(Instansi 1)"
+const labelBerkas = (jenis, item) =>
+  jenis === "surat-pengajuan" && item.instansi_kedua
+    ? `${LABEL_BERKAS[jenis]} (Instansi 1)`
+    : LABEL_BERKAS[jenis];
+
 const FIELD_LAMA = {
   "surat-pengajuan": "surat_pengajuan_url",
+  "surat-pengajuan-kedua": "surat_pengajuan_kedua_url",
   "bukti-spp": "bukti_spp_url",
   "surat-rekomendasi": "surat_rekomendasi_url",
   "surat-magang": "surat_magang_url",
@@ -274,12 +285,13 @@ const ambilBerkas = (item) => {
 
   return Object.keys(LABEL_BERKAS)
     .map((jenis) => {
+      const label = labelBerkas(jenis, item);
       const b = dariApi.find((x) => x.jenis === jenis);
 
       if (b?.preview_url) {
         return {
           jenis,
-          label: LABEL_BERKAS[jenis],
+          label,
           ekstensi: (b.ekstensi || ekstensiDari(b.preview_url)).toLowerCase(),
           preview_url: b.preview_url,
           download_url: b.download_url ?? null,
@@ -291,7 +303,7 @@ const ambilBerkas = (item) => {
       if (typeof lama === "string" && /^https?:/i.test(lama)) {
         return {
           jenis,
-          label: LABEL_BERKAS[jenis],
+          label,
           ekstensi: ekstensiDari(lama),
           preview_url: lama,
           download_url: null,
@@ -312,15 +324,24 @@ const normalisasiAnggota = (anggota) =>
       }))
     : [];
 
-// Tempat magang ke-2 dari server (jika ada)
+// Tempat magang ke-2 dari server (jika ada).
+// Server mengirim field datar (instansi_kedua, dst.); array tempat_magang jadi cadangan.
 const ambilTempat2 = (item = {}) => {
   const t = Array.isArray(item.tempat_magang) ? item.tempat_magang[1] : null;
-  if (!t) return null;
+  const instansi = item.instansi_kedua ?? t?.instansi ?? t?.nama ?? "";
+
+  if (!instansi) return null;
+
   return {
-    instansi: t.instansi ?? t.nama ?? "",
-    alamat_instansi: t.alamat_instansi ?? t.alamat ?? "",
-    tanggal_mulai: String(t.tanggal_mulai || "").slice(0, 10),
-    tanggal_selesai: String(t.tanggal_selesai || "").slice(0, 10),
+    instansi,
+    alamat_instansi:
+      item.alamat_instansi_kedua ?? t?.alamat_instansi ?? t?.alamat ?? "",
+    tanggal_mulai: String(
+      item.tanggal_mulai_kedua ?? t?.tanggal_mulai ?? "",
+    ).slice(0, 10),
+    tanggal_selesai: String(
+      item.tanggal_selesai_kedua ?? t?.tanggal_selesai ?? "",
+    ).slice(0, 10),
   };
 };
 
@@ -746,6 +767,8 @@ export default function FormPengajuan() {
   const [disetujui, setDisetujui] = useState(false);
   const [menyetujui, setMenyetujui] = useState(false);
   const [versiPreview, setVersiPreview] = useState(0);
+  // Surat instansi mana yang sedang dipreview di langkah tanda tangan (1 atau 2)
+  const [urutanPreview, setUrutanPreview] = useState(1);
   const [preview, setPreview] = useState({
     src: "",
     srcDoc: "",
@@ -764,6 +787,9 @@ export default function FormPengajuan() {
   const [memuatDetail, setMemuatDetail] = useState(false);
 
   const tampilRiwayat = riwayat.length > 0 && !buatBaru;
+
+  // Tanpa tempat magang kedua, preview selalu surat pertama
+  const urutanAktif = form.tempat2 ? urutanPreview : 1;
 
   // Pengajuan yang masih berjalan (menunggu / perlu revisi): tidak boleh membuat pengajuan baru
   const adaBerjalan = riwayat.some(
@@ -845,13 +871,14 @@ export default function FormPengajuan() {
     };
   }, [pilihId, tampilRiwayat]);
 
+  // Preview surat di langkah tanda tangan; dimuat ulang saat tab instansi berganti
   useEffect(() => {
     if (step !== 2 || !pengajuanId.current) return;
     let batal = false;
     let objectUrl = "";
 
     setPreview({ src: "", srcDoc: "", loading: true, error: "" });
-    ambilPreview(pengajuanId.current)
+    ambilPreview(pengajuanId.current, urutanAktif)
       .then((hasil) => {
         if (batal) {
           if (hasil.objectUrl) URL.revokeObjectURL(hasil.objectUrl);
@@ -879,7 +906,7 @@ export default function FormPengajuan() {
       batal = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [step, versiPreview]);
+  }, [step, versiPreview, urutanAktif]);
 
   const update = (field) => (e) => {
     let value = e.target.files ? e.target.files[0] || null : e.target.value;
@@ -953,6 +980,7 @@ export default function FormPengajuan() {
   const hapusTempat2 = () => {
     setForm((f) => ({ ...f, tempat2: null }));
     setErrors(({ tempat2, ...sisa }) => sisa);
+    setUrutanPreview(1);
   };
 
   const ubahTempat2 = (field, value) => {
@@ -1090,6 +1118,7 @@ export default function FormPengajuan() {
         return;
       }
       setLoading(false);
+      setUrutanPreview(1); // selalu mulai dari surat instansi pertama
     }
     setStep((s) => s + 1);
   };
@@ -1204,6 +1233,7 @@ export default function FormPengajuan() {
     setErrors({});
     setMsg(null);
     setDisetujui(false);
+    setUrutanPreview(1);
     setPreview({ src: "", srcDoc: "", loading: false, error: "" });
     setVersiForm((v) => v + 1);
     setSedangRevisi(null);
@@ -1232,6 +1262,7 @@ export default function FormPengajuan() {
     setErrors({});
     setMsg(null);
     setDisetujui(Boolean(item.sudah_ditandatangani));
+    setUrutanPreview(1);
     setPreview({ src: "", srcDoc: "", loading: false, error: "" });
     setVersiForm((v) => v + 1);
     setSedangRevisi({ id: item.id, catatan: item.catatan_revisi || "" });
@@ -1797,6 +1828,47 @@ export default function FormPengajuan() {
 
                 {step === 2 && (
                   <div>
+                    {/* Tab untuk berpindah antara surat instansi 1 dan 2 */}
+                    {form.tempat2 && (
+                      <div className="mb-3">
+                        <div
+                          role="tablist"
+                          aria-label="Pilih surat yang dipreview"
+                          className="flex rounded-lg border border-[#7B9669] p-1"
+                        >
+                          {[
+                            { urutan: 1, nama: form.instansi },
+                            { urutan: 2, nama: form.tempat2.instansi },
+                          ].map((tab) => (
+                            <button
+                              key={tab.urutan}
+                              type="button"
+                              role="tab"
+                              aria-selected={urutanAktif === tab.urutan}
+                              onClick={() => setUrutanPreview(tab.urutan)}
+                              className={`min-w-0 flex-1 rounded-md px-3 py-2 text-center text-sm font-semibold transition ${
+                                urutanAktif === tab.urutan
+                                  ? "bg-[#404E3B] text-[#E6E6E6]"
+                                  : "text-[#404E3B] hover:bg-[#BAC8B1]"
+                              }`}
+                            >
+                              <span className="block">
+                                Surat instansi {tab.urutan}
+                              </span>
+                              <span className="block truncate text-xs font-normal opacity-80">
+                                {tab.nama.trim() || "-"}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                        <p className="mt-2 text-xs opacity-70">
+                          Pengajuanmu memiliki 2 surat. Periksa keduanya
+                          sebelum menyetujui; satu persetujuan berlaku untuk
+                          kedua surat.
+                        </p>
+                      </div>
+                    )}
+
                     <div className="mb-4 overflow-hidden rounded-lg border border-[#BAC8B1] bg-white">
                       {preview.loading && (
                         <p className="p-6 text-sm">Memuat preview surat...</p>
@@ -1819,7 +1891,7 @@ export default function FormPengajuan() {
                         !preview.error &&
                         (preview.src || preview.srcDoc) && (
                           <iframe
-                            title="Preview surat"
+                            title={`Preview surat instansi ${urutanAktif}`}
                             src={
                               preview.src
                                 ? `${preview.src}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`
