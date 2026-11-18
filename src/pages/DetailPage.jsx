@@ -1,2052 +1,970 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import {
-  Alert,
+  BERKAS_OPSIONAL,
+  BerkasKosong,
   Button,
-  FileInput,
-  Label,
-  Textarea,
-  TextInput,
-} from "flowbite-react";
+  ENDPOINT,
+  FilePreview,
+  formatTanggal,
+  LABEL_BERKAS,
+  NAMA_DEPARTEMEN,
+  namaDepartemen,
+  normalisasiPengajuan,
+  normalisasiStatus,
+  nomorSuratTampil,
+  panggilApi,
+  PATH_DAFTAR,
+  StatusBadge,
+  tanggalUntukInput,
+  unwrap,
+  URUTAN_BERKAS,
+} from "./AdminPage";
 
-const API = "http://172.18.160.171:8000/api";
-const ENDPOINT = {
-  buat: "/pengajuan-magang", // POST = buat pengajuan, GET = daftar pengajuan milik mahasiswa
-  ubah: (id) => `/pengajuan-magang/${id}`, // PUT = ubah, GET = detail
-  // urutan 1 = instansi pertama, 2 = instansi kedua
-  preview: (id, urutan = 1) =>
-    `/pengajuan-magang/${id}/preview-surat?urutan=${urutan}`,
-  tandaTangan: (id) => `/pengajuan-magang/${id}/tanda-tangan`,
-  kirim: (id) => `/pengajuan-magang/${id}/kirim`,
-};
+// Kalau di routes/api.php kamu pakai Route::put, ganti jadi "PUT".
+const METHOD_EDIT = "PATCH";
 
-const DEPARTEMEN_PREFIX = {
-  E141: "Manajemen Hutan",
-  E241: "Hasil Hutan",
-  E341: "Konservasi Sumberdaya Hutan dan Ekowisata",
-  E441: "Silvikultur",
-};
-
-const departemenDariNim = (nim) =>
-  DEPARTEMEN_PREFIX[(nim || "").toUpperCase().slice(0, 4)] || "";
-
-const NAMA_DEPARTEMEN = {
-  MNH: "Manajemen Hutan",
-  THH: "Teknologi Hasil Hutan",
-  KSHE: "Konservasi Sumber Daya Hutan dan Ekowisata",
-  SVK: "Silvikultur",
-};
-
-// Departemen bisa berupa kode ("SVK"), nama, atau objek { kode, nama }
-const namaDep = (dep) => {
-  if (!dep) return "";
-  if (typeof dep === "object")
-    return dep.nama ?? NAMA_DEPARTEMEN[dep.kode] ?? dep.kode ?? "";
-  return NAMA_DEPARTEMEN[dep] ?? String(dep);
-};
-
-const STEPS = ["Data diri", "Tempat magang", "Tanda tangan", "Berkas & kirim"];
-
-const MAX_FILE_SIZE = 2 * 1024 * 1024;
-const EKSTENSI_BOLEH = ["pdf", "jpg", "jpeg", "png"];
-
-// Semua input (TextInput & Textarea) berlatar putih
-const colors = {
-  gray: "border-[#7B9669] bg-white text-[#404E3B] placeholder-[#7a8575] focus:border-[#404E3B] focus:ring-[#7B9669]",
-  failure:
-    "border-[#b42318] bg-white text-[#404E3B] placeholder-[#7a8575] focus:border-[#b42318] focus:ring-[#b42318]",
-};
-const inputTheme = { field: { input: { colors } } };
-const textareaTheme = { colors };
-
-const capitalizeWords = (str) =>
-  str.replace(/(^|\s)(\S)/g, (_, space, ch) => space + ch.toUpperCase());
-
-// ====== Format nama instansi & alamat ======
-// Singkatan yang harus kapital semua (tulis huruf kecil)
-const SEMUA_KAPITAL = ["pt", "cv", "ud", "pd", "rt", "rw"];
-// Singkatan dengan format khusus
-const KHUSUS = { jl: "Jl", gg: "Gg", no: "No" };
-
-// Kapitalkan awal tiap kata. Kata dipisah oleh spasi atau titik,
-// jadi huruf setelah titik otomatis kapital.
-const formatSingkatan = (teks) =>
-  teks.replace(/[^\s.]+/g, (kata) => {
-    const kecil = kata.toLowerCase();
-    if (SEMUA_KAPITAL.includes(kecil)) return kecil.toUpperCase();
-    if (KHUSUS[kecil]) return KHUSUS[kecil];
-    return kata.charAt(0).toUpperCase() + kata.slice(1);
-  });
-
-// Nama instansi: PT / CV / UD / PD ditulis tanpa titik
-// "pt.thudzahra" -> "PT Thudzahra", "PT. Maju" -> "PT Maju", "PT . Mayora" -> "PT Mayora"
-const formatInstansi = (teks) => {
-  const tanpaTitik = teks.replace(
-    /(^|\s)(pt|cv|ud|pd)\s*\.\s*/gi,
-    (_, awal, singkatan) => `${awal}${singkatan.toUpperCase()} `,
-  );
-  return formatSingkatan(tanpaTitik);
-};
-
-// Beri spasi setelah titik yang diikuti huruf: "Jl.Kapten" -> "Jl. Kapten"
-const rapikanTitik = (teks) => teks.replace(/\.(?=[A-Za-z])/g, ". ").trim();
-
-const getUser = () => {
-  try {
-    return JSON.parse(localStorage.getItem("user")) || {};
-  } catch {
-    return {};
-  }
-};
-
-const authHeaders = () => ({
-  Accept: "application/json",
-  Authorization: `Bearer ${localStorage.getItem("token")}`,
-});
-
-const pesanError = (data, fallback) => {
-  if (data?.errors) {
-    return Object.values(data.errors).flat().join(" ");
-  }
-  return data?.message || fallback;
-};
-
-const pesanDariError = (err) =>
-  err instanceof TypeError ? "Tidak dapat terhubung ke server." : err.message;
-
-const panggilApi = async (path, { json, formData, method = "POST" } = {}) => {
-  const response = await fetch(`${API}${path}`, {
-    method,
-    headers: json
-      ? { ...authHeaders(), "Content-Type": "application/json" }
-      : authHeaders(),
-    body: json ? JSON.stringify(json) : formData,
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(pesanError(data, "Permintaan gagal."));
-  return data;
-};
-
-// Menerima urutan surat (1 = instansi pertama, 2 = instansi kedua)
-const ambilPreview = async (id, urutan = 1) => {
-  const response = await fetch(`${API}${ENDPOINT.preview(id, urutan)}`, {
-    headers: authHeaders(),
-  });
-  const type = response.headers.get("content-type") || "";
-
-  if (!response.ok) {
-    const data = type.includes("application/json")
-      ? await response.json().catch(() => ({}))
-      : {};
-    throw new Error(pesanError(data, "Preview surat gagal dimuat."));
-  }
-
-  if (type.includes("application/json")) {
-    const data = await response.json();
-    const html = data.html ?? data.data?.html;
-    if (html) return { srcDoc: html };
-    const url = data.url ?? data.data?.url;
-    if (url) return { src: url };
-    throw new Error("Format respons preview surat tidak dikenali.");
-  }
-
-  const blob = await response.blob();
-  const objectUrl = URL.createObjectURL(blob);
-  return { src: objectUrl, objectUrl };
-};
-
-const validasiBerkas = (file, namaBerkas) => {
-  if (!file) return `${namaBerkas} wajib diunggah.`;
-  if (file.size > MAX_FILE_SIZE) return "Ukuran file maksimal 2 MB.";
-  const ext = (file.name.split(".").pop() || "").toLowerCase();
-  if (!EKSTENSI_BOLEH.includes(ext))
-    return "Format file harus PDF, JPG, atau PNG.";
-  return "";
-};
-
-const bentukTempat = (t) => ({
-  instansi: t.instansi.trim(),
-  alamat_instansi: t.alamat_instansi.trim(),
-  tanggal_mulai: t.tanggal_mulai,
-  tanggal_selesai: t.tanggal_selesai,
-});
-
-// Data yang dikirim ke server untuk membuat / memperbarui pengajuan
-const bentukData = (f) => ({
-  nama: f.nama.trim(),
-  nim: f.nim.trim(),
-  departemen: f.departemen,
-
-  // Tempat magang pertama
-  instansi: f.instansi.trim(),
-  alamat_instansi: f.alamat_instansi.trim(),
-  tanggal_mulai: f.tanggal_mulai,
-  tanggal_selesai: f.tanggal_selesai,
-
-  // Tempat magang kedua: kirim sebagai field terpisah ke Laravel
-  instansi_kedua: f.tempat2?.instansi?.trim() || null,
-  alamat_instansi_kedua: f.tempat2?.alamat_instansi?.trim() || null,
-  tanggal_mulai_kedua: f.tempat2?.tanggal_mulai || null,
-  tanggal_selesai_kedua: f.tempat2?.tanggal_selesai || null,
-
-  // Tetap kirim array untuk kompatibilitas fitur surat
-  tempat_magang: [
-    bentukTempat(f),
-    ...(f.tempat2 ? [bentukTempat(f.tempat2)] : []),
-  ],
-
-  // Anggota kelompok
-  anggota: f.kelompok
-    ? f.anggota.map((a) => ({
-        nama: a.nama.trim(),
-        nim: a.nim.trim(),
-      }))
-    : [],
-});
-
-const unwrap = (response) => response?.data ?? response;
-
-const toArray = (response) => {
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response?.data)) return response.data;
-  if (Array.isArray(response?.data?.data)) return response.data.data;
-  return [];
-};
-
-const formatTanggal = (value) => {
-  if (!value) return "-";
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(value)
-    ? new Date(`${value}T00:00:00`)
-    : new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(date);
-};
-
-const normalisasiStatus = (status) => {
-  const value = String(
-    typeof status === "object" ? (status?.value ?? "") : (status ?? ""),
-  ).toLowerCase();
-  const alias = {
-    setuju: "setuju",
-    disetujui: "setuju",
-    terverifikasi: "setuju",
-    revisi: "revisi",
-    ditolak: "revisi",
-    draft: "draft",
-    menunggu: "menunggu_verifikasi",
-    menunggu_verifikasi: "menunggu_verifikasi",
-  };
-  return alias[value] ?? (value || "menunggu_verifikasi");
-};
-
-const STATUS = {
-  menunggu_verifikasi: {
-    label: "Menunggu verifikasi",
-    className: "bg-[#FDEFC3] text-[#8A5A00]",
-  },
-  setuju: { label: "Disetujui", className: "bg-[#404E3B] text-[#E6E6E6]" },
-  revisi: { label: "Perlu revisi", className: "bg-red-100 text-red-800" },
-};
-
-const LABEL_BERKAS = {
-  "surat-pengajuan": "Surat pengajuan magang",
-  "surat-pengajuan-kedua": "Surat pengajuan magang (Instansi 2)",
-  "bukti-spp": "Bukti pembayaran SPP",
-  "surat-rekomendasi": "Surat rekomendasi",
-  "surat-magang": "Surat pengantar magang (resmi)",
-};
-
-// Bila ada dua instansi, surat pertama diberi keterangan "(Instansi 1)"
-const labelBerkas = (jenis, item) =>
-  jenis === "surat-pengajuan" && item.instansi_kedua
-    ? `${LABEL_BERKAS[jenis]} (Instansi 1)`
-    : LABEL_BERKAS[jenis];
-
-const FIELD_LAMA = {
-  "surat-pengajuan": "surat_pengajuan_url",
-  "surat-pengajuan-kedua": "surat_pengajuan_kedua_url",
-  "bukti-spp": "bukti_spp_url",
-  "surat-rekomendasi": "surat_rekomendasi_url",
-  "surat-magang": "surat_magang_url",
-};
-
-const ekstensiDari = (url = "") => {
-  const cocok = String(url)
-    .split("?")[0]
-    .match(/\.([a-z0-9]+)$/i);
-  return cocok ? cocok[1].toLowerCase() : "";
-};
-
-const ambilBerkas = (item) => {
-  const dariApi = Array.isArray(item.berkas) ? item.berkas : [];
-
-  return Object.keys(LABEL_BERKAS)
-    .map((jenis) => {
-      const label = labelBerkas(jenis, item);
-      const b = dariApi.find((x) => x.jenis === jenis);
-
-      if (b?.preview_url) {
-        return {
-          jenis,
-          label,
-          ekstensi: (b.ekstensi || ekstensiDari(b.preview_url)).toLowerCase(),
-          preview_url: b.preview_url,
-          download_url: b.download_url ?? null,
-        };
-      }
-
-      const lama = item[FIELD_LAMA[jenis]];
-
-      if (typeof lama === "string" && /^https?:/i.test(lama)) {
-        return {
-          jenis,
-          label,
-          ekstensi: ekstensiDari(lama),
-          preview_url: lama,
-          download_url: null,
-        };
-      }
-
-      return null;
-    })
-    .filter(Boolean);
-};
-
-// Anggota dari server: array of { nama, nim } (nama field bisa bervariasi)
-const normalisasiAnggota = (anggota) =>
-  Array.isArray(anggota)
-    ? anggota.map((a) => ({
-        nama: a?.nama ?? a?.name ?? "",
-        nim: String(a?.nim ?? "").toUpperCase(),
-      }))
-    : [];
-
-// Tempat magang ke-2 dari server (jika ada).
-// Server mengirim field datar (instansi_kedua, dst.); array tempat_magang jadi cadangan.
-const ambilTempat2 = (item = {}) => {
-  const t = Array.isArray(item.tempat_magang) ? item.tempat_magang[1] : null;
-  const instansi = item.instansi_kedua ?? t?.instansi ?? t?.nama ?? "";
-
-  if (!instansi) return null;
-
-  return {
-    instansi,
-    alamat_instansi:
-      item.alamat_instansi_kedua ?? t?.alamat_instansi ?? t?.alamat ?? "",
-    tanggal_mulai: String(
-      item.tanggal_mulai_kedua ?? t?.tanggal_mulai ?? "",
-    ).slice(0, 10),
-    tanggal_selesai: String(
-      item.tanggal_selesai_kedua ?? t?.tanggal_selesai ?? "",
-    ).slice(0, 10),
-  };
-};
-
-const normalisasiRiwayat = (item = {}) => {
-  const user = getUser();
-  const mhs = item.mahasiswa ?? {};
-  const nim = mhs.nim ?? item.nim ?? user.nim ?? "-";
-
-  return {
-    ...item,
-    status: normalisasiStatus(item.status),
-    nama: mhs.nama ?? mhs.name ?? item.nama ?? user.name ?? "-",
-    nim,
-    departemen:
-      namaDep(mhs.departemen ?? item.departemen ?? user.departemen) ||
-      departemenDariNim(nim) ||
-      "-",
-    anggota: normalisasiAnggota(item.anggota),
-    alamat: item.alamat_instansi ?? item.alamat ?? "-",
-    nomorSurat: item.nomor_surat ?? item.no_registrasi ?? null,
-    dikirim: item.dikirim_at ?? item.created_at ?? null,
-    daftarBerkas: ambilBerkas(item),
-  };
-};
+// Nama field daftar anggota yang dikirim ke PengajuanMagangController@update.
+// Sesuaikan dengan validasi di backend.
+const KEY_KIRIM_ANGGOTA = "anggota";
 
 // =====================================================
-// KOMPONEN KECIL
+// ISI HALAMAN DETAIL, EDIT, DAN VERIFIKASI
 // =====================================================
 
-function Field({ id, label, error, optional, children }) {
-  return (
-    <div className="flex flex-col">
-      <Label htmlFor={id} className="mb-1 font-semibold text-[#404E3B]">
-        {label} {!optional && <span className="text-[#b42318]">*</span>}
-      </Label>
-      {children}
-      <p className="mt-1 min-h-5 text-xs font-medium text-[#b42318]">{error}</p>
-    </div>
-  );
-}
+const DEPARTEMEN_DARI_NIM = {
+  E141: "MNH",
+  E241: "THH",
+  E341: "KSHE",
+  E441: "SVK",
+};
 
-function Stepper({ step }) {
-  return (
-    <ol className="mb-8 flex items-center">
-      {STEPS.map((label, i) => (
-        <li
-          key={label}
-          className={`flex items-center ${i < STEPS.length - 1 ? "flex-1" : ""}`}
-        >
-          <span
-            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-sm font-semibold ${
-              i <= step
-                ? "border-[#404E3B] bg-[#404E3B] text-[#E6E6E6]"
-                : "border-[#BAC8B1] text-[#7B9669]"
-            }`}
-          >
-            {i < step ? "✓" : i + 1}
-          </span>
-          <span
-            className={`ml-2 text-sm font-semibold ${
-              i === step
-                ? "inline text-[#404E3B]"
-                : "hidden text-[#7B9669] sm:inline"
-            }`}
-          >
-            {label}
-          </span>
-          {i < STEPS.length - 1 && (
-            <span
-              className={`mx-3 h-px flex-1 ${i < step ? "bg-[#404E3B]" : "bg-[#BAC8B1]"}`}
-            />
-          )}
-        </li>
-      ))}
-    </ol>
-  );
-}
+// Daftar mahasiswa dari API (`daftar_mahasiswa`, urutan pertama biasanya ketua).
+// Yang ditampilkan sebagai anggota adalah semua entri selain ketua (NIM sama).
+function ambilAnggota(item) {
+  let data = item.daftar_mahasiswa ?? item.anggota;
 
-function StatusBadge({ status }) {
-  const config = STATUS[status] ?? {
-    label: status,
-    className: "bg-gray-200 text-gray-700",
-  };
-
-  return (
-    <span
-      className={`inline-block w-fit rounded-full px-3 py-1 text-xs font-semibold ${config.className}`}
-    >
-      {config.label}
-    </span>
-  );
-}
-
-function BerkasBaris({ berkas, terbuka, onToggle }) {
-  const gambar = ["jpg", "jpeg", "png", "gif", "webp"].includes(
-    berkas.ekstensi,
-  );
-
-  return (
-    <div className="overflow-hidden rounded-lg border border-[#BAC8B1] bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
-        <strong>{berkas.label}</strong>
-
-        <span className="flex flex-wrap gap-4">
-          <button type="button" onClick={onToggle} className="underline">
-            {terbuka ? "Sembunyikan Surat" : "Preview Surat"}
-          </button>
-
-          <a
-            href={berkas.preview_url}
-            target="_blank"
-            rel="noreferrer"
-            className="underline"
-          >
-            Buka berkas
-          </a>
-
-          {berkas.download_url && (
-            <a
-              href={berkas.download_url}
-              target="_blank"
-              rel="noreferrer"
-              className="underline"
-            >
-              Download
-            </a>
-          )}
-        </span>
-      </div>
-
-      {terbuka &&
-        (gambar ? (
-          <img
-            src={berkas.preview_url}
-            alt={berkas.label}
-            className="max-h-[520px] w-full border-t border-[#BAC8B1] bg-white object-contain"
-          />
-        ) : (
-          <iframe
-            src={`${berkas.preview_url}#toolbar=0&navpanes=0&view=FitH`}
-            title={berkas.label}
-            className="h-[640px] w-full border-t border-[#BAC8B1]"
-          />
-        ))}
-    </div>
-  );
-}
-
-// Tampilan riwayat: isi formulir yang sama, hanya dibaca (tidak bisa diubah)
-function FormRiwayat({ item, memuatDetail }) {
-  const [activeTab, setActiveTab] = useState("data_diri");
-  // State untuk melacak berkas mana yang sedang di-preview (jika menggunakan iframe/gambar di dalam halaman)
-  const [previewBerkas, setPreviewBerkas] = useState(null);
-
-  const anggota = Array.isArray(item.anggota) ? item.anggota : [];
-  const tempat2 = ambilTempat2(item);
-
-  const berkasServer = item.daftarBerkas.filter(
-    (b) => b.jenis !== "surat-magang" || item.status === "setuju"
-  );
-
-  // Berkas yang baru saja diunggah di perangkat ini
-  const berkasLokal = (Array.isArray(item.berkasLokal) ? item.berkasLokal : [])
-    .filter((l) => !berkasServer.some((b) => b.jenis === l.jenis))
-    .map((l) => ({
-      jenis: l.jenis,
-      label: l.label,
-      ekstensi: l.ekstensi,
-      preview_url: l.url,
-      download_url: null,
-    }));
-
-  const berkas = [...berkasServer, ...berkasLokal];
-
-  return (
-    <div className="p-6 sm:p-8">
-      {/* Header Riwayat */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="font-bold text-lg">Pengajuan - {item.nama}</p>
-          <p className="text-xs text-gray-500">
-            Dikirim {formatTanggal(item.dikirim)}
-          </p>
-        </div>
-        <StatusBadge status={item.status} />
-      </div>
-
-      {/* Stepper Horizontal */}
-      <Stepper step={STEPS.length} />
-
-      {memuatDetail && (
-        <p className="mb-3 text-sm opacity-70">Memuat detail pengajuan...</p>
-      )}
-
-      {item.status === "setuju" && item.nomorSurat && (
-        <div className="mb-4">
-          <Field id="r-nomor" label="Nomor surat" optional>
-            <TextInput
-              id="r-nomor"
-              theme={inputTheme}
-              value={item.nomorSurat}
-              readOnly
-              color="gray"
-              className="cursor-default font-bold"
-            />
-          </Field>
-        </div>
-      )}
-
-      {item.status === "revisi" && item.catatan_revisi && (
-        <div className="mb-6 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800">
-          <b>Catatan revisi dari admin:</b>
-          <p className="mt-1 whitespace-pre-line">{item.catatan_revisi}</p>
-        </div>
-      )}
-
-      {/* Navigasi Tab */}
-      <div className="mb-6 flex gap-6 border-b border-[#BAC8B1]">
-        {[
-          { id: "data_diri", label: "Data diri" },
-          { id: "tempat_magang", label: "Tempat magang" },
-          { id: "berkas", label: "Berkas" },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveTab(tab.id)}
-            className={`pb-2 text-sm font-semibold transition ${
-              activeTab === tab.id
-                ? "border-b-2 border-[#404E3B] text-[#404E3B]"
-                : "text-[#7B9669] hover:text-[#404E3B]"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Konten Berdasarkan Tab */}
-      <div className="space-y-6">
-        {/* --- TAB DATA DIRI --- */}
-        {activeTab === "data_diri" && (
-          <div>
-            {/* Pengirim (Nama, NIM, Departemen sejajar) */}
-            <div className="mb-6 grid gap-x-4 sm:grid-cols-3">
-              <div>
-                <p className="text-xs text-gray-500">Nama lengkap</p>
-                <p className="font-semibold">{item.nama}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">NIM</p>
-                <p className="font-semibold">{item.nim}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Departemen</p>
-                <p className="font-semibold">{item.departemen}</p>
-              </div>
-            </div>
-
-            {/* Anggota Kelompok (Tanpa Border) */}
-            {anggota.length > 0 && (
-              <div>
-                <div className="mb-3 flex items-center justify-between">
-                  <p className="text-sm font-semibold">Anggota kelompok</p>
-                  <span className="text-xs text-gray-500">
-                    {anggota.length + 1} orang
-                  </span>
-                </div>
-                <div className="space-y-4">
-                  {anggota.map((a, i) => (
-                    <div key={i} className="grid gap-x-4 sm:grid-cols-3">
-                      <div>
-                        <p className="text-xs text-gray-500">Nama anggota</p>
-                        <p className="font-semibold">{a.nama}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">NIM</p>
-                        <p className="font-semibold">{a.nim}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Departemen</p>
-                        <p className="font-semibold">
-                          {namaDep(departemenDariNim(a.nim)) || "-"}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* --- TAB TEMPAT MAGANG --- */}
-        {activeTab === "tempat_magang" && (
-          <div className="space-y-4">
-            {/* Tempat Magang 1 */}
-            <div className="rounded-xl border border-[#BAC8B1] bg-[#F4F8F2] p-5">
-              <p className="mb-4 font-bold text-[#404E3B]">Tempat magang 1</p>
-              
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <p className="text-xs text-gray-500">Instansi</p>
-                  <p className="font-semibold text-[#404E3B]">{item.instansi || "-"}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Periode</p>
-                  <p className="font-semibold text-[#404E3B]">
-                    {formatTanggal(item.tanggal_mulai)} – {formatTanggal(item.tanggal_selesai)}
-                  </p>
-                </div>
-                <div className="sm:col-span-2">
-                  <p className="text-xs text-gray-500">Alamat</p>
-                  <p className="whitespace-pre-line font-semibold text-[#404E3B]">
-                    {item.alamat || "-"}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Tempat Magang 2 */}
-            {tempat2 && (
-              <div className="rounded-xl border border-[#BAC8B1] bg-[#F4F8F2] p-5">
-                <p className="mb-4 font-bold text-[#404E3B]">Tempat magang 2</p>
-                
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <p className="text-xs text-gray-500">Instansi</p>
-                    <p className="font-semibold text-[#404E3B]">{tempat2.instansi || "-"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Periode</p>
-                    <p className="font-semibold text-[#404E3B]">
-                      {formatTanggal(tempat2.tanggal_mulai)} – {formatTanggal(tempat2.tanggal_selesai)}
-                    </p>
-                  </div>
-                  <div className="sm:col-span-2">
-                    <p className="text-xs text-gray-500">Alamat</p>
-                    <p className="whitespace-pre-line font-semibold text-[#404E3B]">
-                      {tempat2.alamat_instansi || "-"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* --- TAB BERKAS --- */}
-        {activeTab === "berkas" && (
-          <div>
-            {berkas.length > 0 ? (
-              <div className="flex flex-col">
-                {berkas.map((b) => (
-                  <div
-                    key={b.jenis}
-                    className="flex flex-wrap items-center justify-between gap-3 border-b border-[#BAC8B1] py-4 text-sm last:border-0"
-                  >
-                    <strong className="text-[#404E3B]">{b.label}</strong>
-                    
-                    <div className="flex items-center gap-4 font-semibold text-[#1F6B2E]">
-                      <button
-                        type="button"
-                        onClick={() => setPreviewBerkas(previewBerkas === b.jenis ? null : b.jenis)}
-                        className="hover:underline"
-                      >
-                        {previewBerkas === b.jenis ? "Tutup Preview" : "Preview"}
-                      </button>
-                      
-                      <a
-                        href={b.download_url || b.preview_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="hover:underline"
-                      >
-                        Download
-                      </a>
-                    </div>
-
-                    {/* Area Preview yang muncul di bawah baris jika tombol Preview diklik */}
-                    {previewBerkas === b.jenis && (
-                      <div className="mt-4 w-full overflow-hidden rounded-xl border border-[#BAC8B1] bg-white">
-                        {["jpg", "jpeg", "png", "gif", "webp"].includes(b.ekstensi) ? (
-                          <img
-                            src={b.preview_url}
-                            alt={b.label}
-                            className="max-h-[520px] w-full bg-white object-contain"
-                          />
-                        ) : (
-                          <iframe
-                            src={`${b.preview_url}#toolbar=0&navpanes=0&view=FitH`}
-                            title={b.label}
-                            className="h-[640px] w-full"
-                          />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm opacity-70">
-                Berkas belum tersedia untuk dilihat.
-              </p>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// =====================================================
-// HALAMAN FORMULIR + RIWAYAT
-// =====================================================
-
-export default function FormPengajuan() {
-  const user = getUser();
-  const pengajuanId = useRef(null);
-  const snapshotDraft = useRef("");
-
-  const dataAwal = {
-    nama: user.name || "",
-    nim: (user.nim || "").toUpperCase(),
-    departemen: departemenDariNim(user.nim),
-    kelompok: false,
-    anggota: [],
-    instansi: "",
-    alamat_instansi: "",
-    tanggal_mulai: "",
-    tanggal_selesai: "",
-    tempat2: null,
-    bukti_spp: null,
-    surat_rekomendasi: null,
-  };
-
-  const [step, setStep] = useState(0);
-  const [form, setForm] = useState(dataAwal);
-  const [tempat2Terbuka, setTempat2Terbuka] = useState(true);
-  const [errors, setErrors] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState(null);
-  const [disetujui, setDisetujui] = useState(false);
-  const [menyetujui, setMenyetujui] = useState(false);
-  const [versiPreview, setVersiPreview] = useState(0);
-  // Satu entri per surat (satu surat per instansi); semuanya tampil bersamaan
-  const [previews, setPreviews] = useState([]);
-
-  // Riwayat pengajuan yang sudah dikirim
-  const [riwayat, setRiwayat] = useState([]);
-  const [memuatRiwayat, setMemuatRiwayat] = useState(true);
-  const [buatBaru, setBuatBaru] = useState(false);
-  const [sedangRevisi, setSedangRevisi] = useState(null); // { id, catatan } saat memperbaiki pengajuan
-  const [versiForm, setVersiForm] = useState(0);
-  const [pilihId, setPilihId] = useState(null);
-  const [detail, setDetail] = useState(null);
-  const [memuatDetail, setMemuatDetail] = useState(false);
-
-  const tampilRiwayat = riwayat.length > 0 && !buatBaru;
-
-  // Banyaknya surat = banyaknya instansi (1 atau 2)
-  const jumlahSurat = form.tempat2 ? 2 : 1;
-
-  // Pengajuan yang masih berjalan (menunggu / perlu revisi): tidak boleh membuat pengajuan baru
-  const adaBerjalan = riwayat.some(
-    (p) => p.status === "menunggu_verifikasi" || p.status === "revisi",
-  );
-
-  // Di langkah tanda tangan, tombol Lanjut berwarna abu-abu selama surat belum disetujui
-  const belumSetuju = step === 2 && !disetujui;
-
-  // Ambil daftar pengajuan yang sudah dikirim. `lokal` = cadangan jika server belum mengembalikannya.
-  const muatRiwayat = async (lokal = null) => {
-    let hasil = [];
-
+  if (typeof data === "string") {
     try {
-      const response = await panggilApi(ENDPOINT.buat, { method: "GET" });
-
-      hasil = toArray(response)
-        .map(normalisasiRiwayat)
-        .filter((p) => p.status !== "draft");
+      data = JSON.parse(data);
     } catch {
-      // endpoint daftar belum ada / gagal: pakai data lokal jika ada
+      data = [];
     }
+  }
 
-    if (lokal) {
-      if (hasil.some((p) => String(p.id) === String(lokal.id))) {
-        // pengajuan sudah ada di server: tempelkan berkas yang baru diunggah agar bisa dilihat
-        hasil = hasil.map((p) =>
-          String(p.id) === String(lokal.id)
-            ? {
-                ...p,
-                berkasLokal: lokal.berkasLokal,
-                tempat_magang: p.tempat_magang ?? lokal.tempat_magang,
-              }
-            : p,
-        );
-      } else {
-        hasil.unshift(normalisasiRiwayat(lokal));
-      }
-    }
+  if (!Array.isArray(data)) return [];
 
-    hasil.sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+  const lengkap = data.map((a) =>
+    typeof a === "string"
+      ? { nama: a, nim: "" }
+      : { ...a, nama: a?.nama ?? a?.name ?? "", nim: a?.nim ?? "" }
+  );
 
-    setRiwayat(hasil);
-    setPilihId(lokal?.id ?? hasil[0]?.id ?? null);
-    setMemuatRiwayat(false);
+  const idxKetua = lengkap.findIndex((a) => a.nim && a.nim === item.nim);
+
+  return idxKetua === -1
+    ? lengkap
+    : lengkap.filter((_, i) => i !== idxKetua);
+}
+
+function formAwal(item) {
+  return {
+    nama: item.nama === "-" ? "" : item.nama ?? "",
+    nim: item.nim === "-" ? "" : item.nim ?? "",
+    departemen: item.departemenKode === "-" ? "" : item.departemenKode ?? "",
+    instansi: item.instansi ?? "",
+    alamat_instansi:
+      item.alamat_instansi ?? (item.alamat === "-" ? "" : item.alamat ?? ""),
+    tanggal_mulai: tanggalUntukInput(item.tanggal_mulai),
+    tanggal_selesai: tanggalUntukInput(item.tanggal_selesai),
+    // Instansi kedua (kosong bila pengajuan hanya punya satu instansi)
+    instansi2: item.tempat2?.instansi ?? "",
+    alamat_instansi2: item.tempat2?.alamat_instansi ?? "",
+    tanggal_mulai2: tanggalUntukInput(item.tempat2?.tanggal_mulai),
+    tanggal_selesai2: tanggalUntukInput(item.tempat2?.tanggal_selesai),
+    anggota: ambilAnggota(item),
   };
+}
 
-  useEffect(() => {
-    muatRiwayat();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+// Nama field kontak dari API (dicari di pengajuan, lalu di data mahasiswa/user).
+// Tambahkan nama field backend kamu di sini kalau belum ada.
+const KEY_HP = [
+  "no_hp",
+  "nomor_hp",
+  "no_telepon",
+  "nomor_telepon",
+  "no_telp",
+  "telepon",
+  "no_wa",
+  "nomor_wa",
+  "whatsapp",
+  "phone",
+  "hp",
+];
+const KEY_EMAIL = ["email"];
 
-  // Detail pengajuan yang dipilih (untuk berkas, nomor surat, catatan revisi)
-  useEffect(() => {
-    if (!tampilRiwayat || pilihId == null) {
-      setDetail(null);
-      return undefined;
+function cariNilai(item, keys) {
+  const sumber = [item, item.mahasiswa, item.user, item.pengaju];
+
+  for (const obj of sumber) {
+    if (!obj || typeof obj !== "object") continue;
+
+    for (const k of keys) {
+      const v = obj[k];
+
+      if (v != null && String(v).trim() !== "") return String(v).trim();
     }
+  }
 
-    let batal = false;
+  return "";
+}
 
-    setMemuatDetail(true);
+// 0812-xxxx / +62 812 xxxx / 812xxxx  ->  62812xxxx (format wa.me)
+function nomorWa(hp) {
+  const angka = String(hp).replace(/\D/g, "");
 
-    panggilApi(ENDPOINT.ubah(pilihId), { method: "GET" })
-      .then((response) => {
-        if (batal) return;
-        const isi = unwrap(response);
-        setDetail(normalisasiRiwayat(isi?.pengajuan ?? isi));
-      })
-      .catch(() => {
-        if (!batal) setDetail(null);
-      })
-      .finally(() => {
-        if (!batal) setMemuatDetail(false);
-      });
+  if (!angka) return "";
+  if (angka.startsWith("62")) return angka;
+  if (angka.startsWith("0")) return `62${angka.slice(1)}`;
+  if (angka.startsWith("8")) return `62${angka}`;
 
-    return () => {
-      batal = true;
-    };
-  }, [pilihId, tampilRiwayat]);
+  return angka;
+}
 
-  // Preview semua surat di langkah tanda tangan (instansi 1 dan 2 dimuat bersamaan)
+const INPUT =
+  "w-full rounded-lg border border-[#BAC8B1] bg-white px-3 py-2.5 text-sm font-semibold text-[#404E3B] outline-none focus:border-[#404E3B] focus:ring-2 focus:ring-[#BAC8B1] disabled:opacity-60";
+
+// Kartu pengelompok form: judul + isi
+function Section({ judul, keterangan, children }) {
+  return (
+    <section className="rounded-2xl border border-[#BAC8B1] bg-white">
+      <div className="border-b border-[#E6E6E6] px-5 py-3.5 sm:px-6">
+        <h2 className="font-bold">{judul}</h2>
+        {keterangan && (
+          <p className="mt-0.5 text-xs text-[#5b6b55]">{keterangan}</p>
+        )}
+      </div>
+
+      <div className="space-y-6 p-5 sm:p-6">{children}</div>
+    </section>
+  );
+}
+
+// Satu kolom: label di atas, lalu input (mode edit) atau teks (mode lihat)
+function Kolom({ label, edit, value, children, className = "" }) {
+  return (
+    <div className={`min-w-0 ${className}`}>
+      {edit ? (
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium opacity-70">{label}</span>
+          {children}
+        </label>
+      ) : (
+        <div className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium opacity-70">{label}</span>
+          <b className="break-words font-semibold">{value || "-"}</b>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Popup di dalam aplikasi (pengganti window.confirm / window.prompt bawaan browser).
+// Tutup dengan tombol Batal, klik area gelap, atau tombol Esc.
+function Dialog({ judul, onClose, children }) {
   useEffect(() => {
-    if (step !== 2 || !pengajuanId.current) return;
-    let batal = false;
-    const objectUrls = [];
+    const tekanTombol = (e) => {
+      if (e.key === "Escape") onClose();
+    };
 
-    const ubahSurat = (index, nilai) =>
-      setPreviews((prev) => prev.map((p, i) => (i === index ? nilai : p)));
+    window.addEventListener("keydown", tekanTombol);
 
-    setPreviews(
-      Array.from({ length: jumlahSurat }, () => ({
-        src: "",
-        srcDoc: "",
-        loading: true,
-        error: "",
-      })),
+    return () => window.removeEventListener("keydown", tekanTombol);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={judul}
+        className="w-full max-w-md rounded-2xl bg-white p-6 text-[#404E3B] shadow-2xl"
+      >
+        <h2 className="text-lg font-bold">{judul}</h2>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [sukses, setSukses] = useState("");
+
+  const [form, setForm] = useState(() => formAwal(item));
+
+  // Popup yang sedang terbuka: "verifikasi" | "revisi" | "keluar" | null
+  const [dialog, setDialog] = useState(null);
+  const [catatan, setCatatan] = useState("");
+  const [errCatatan, setErrCatatan] = useState("");
+
+  const status = normalisasiStatus(item.status);
+  const verified = status === "terverifikasi";
+  // Data bisa langsung diubah selama belum disetujui.
+  const edit = status === "menunggu" || status === "ditolak";
+  const nomorSurat = nomorSuratTampil(item);
+  const hp = cariNilai(item, KEY_HP);
+  const email = cariNilai(item, KEY_EMAIL);
+  const tujuanWa = nomorWa(hp);
+  const linkWa = tujuanWa
+    ? `https://wa.me/${tujuanWa}?text=${encodeURIComponent(
+        `Halo ${item.nama}, kami dari admin magang Fakultas Kehutanan dan Lingkungan IPB terkait pengajuan magang Anda.`
+      )}`
+    : "";
+  const suratMagang = item.daftarBerkas.find((b) => b.jenis === "surat-magang");
+  const suratMagang2 = item.daftarBerkas.find(
+    (b) => b.jenis === "surat-magang-kedua"
+  );
+
+  const awal = formAwal(item);
+  const berubah =
+    edit &&
+    Object.keys(awal).some(
+      (k) => JSON.stringify(awal[k]) !== JSON.stringify(form[k])
     );
 
-    for (let urutan = 1; urutan <= jumlahSurat; urutan += 1) {
-      const index = urutan - 1;
+  function resetForm() {
+    setError("");
+    setSukses("");
+    setForm(formAwal(item));
+  }
 
-      ambilPreview(pengajuanId.current, urutan)
-        .then((hasil) => {
-          if (batal) {
-            if (hasil.objectUrl) URL.revokeObjectURL(hasil.objectUrl);
-            return;
-          }
-          if (hasil.objectUrl) objectUrls.push(hasil.objectUrl);
-          ubahSurat(index, {
-            src: hasil.src || "",
-            srcDoc: hasil.srcDoc || "",
-            loading: false,
-            error: "",
-          });
-        })
-        .catch((err) => {
-          if (!batal)
-            ubahSurat(index, {
-              src: "",
-              srcDoc: "",
-              loading: false,
-              error: pesanDariError(err),
-            });
-        });
-    }
+  const ubah = (key) => (e) =>
+    setForm((f) => ({ ...f, [key]: e.target.value }));
 
-    return () => {
-      batal = true;
-      objectUrls.forEach((u) => URL.revokeObjectURL(u));
-    };
-  }, [step, versiPreview, jumlahSurat]);
+  // NIM huruf besar, maksimal 11 karakter; departemen ikut berubah sesuai awalan NIM.
+  const ubahNim = (e) => {
+    const nim = e.target.value.toUpperCase().replace(/\s/g, "").slice(0, 11);
+    const kode = DEPARTEMEN_DARI_NIM[nim.slice(0, 4)];
 
-  const update = (field) => (e) => {
-    let value = e.target.files ? e.target.files[0] || null : e.target.value;
-    if (field === "nama") value = capitalizeWords(value);
-    if (field === "nim") value = value.toUpperCase();
-    if (field === "instansi") value = formatInstansi(value);
-    if (field === "alamat_instansi") value = formatSingkatan(value);
-    setForm((f) => ({ ...f, [field]: value }));
-    setErrors((er) => ({ ...er, [field]: "" }));
+    setForm((f) => ({ ...f, nim, ...(kode ? { departemen: kode } : {}) }));
   };
 
-  // Dipanggil saat klik keluar dari field: rapikan spasi setelah titik
-  const rapikan = (field) => () =>
-    setForm((f) => ({ ...f, [field]: rapikanTitik(f[field]) }));
+  const adaKelompok = awal.anggota.length > 0 || form.anggota.length > 0;
+  const daftarAnggota = edit ? form.anggota : awal.anggota;
 
-  // ---------- Pengajuan kelompok ----------
-  const hapusErrorAnggota = () =>
-    setErrors(({ anggota, anggota_umum, ...sisa }) => sisa);
-
-  const ubahJenis = (kelompok) => {
+  const ubahAnggota = (i, key, nilai) =>
     setForm((f) => ({
       ...f,
-      kelompok,
-      anggota:
-        kelompok && f.anggota.length === 0
-          ? [{ nama: "", nim: "" }]
-          : f.anggota,
-    }));
-    hapusErrorAnggota();
-  };
-
-  const ubahAnggota = (index, field, value) => {
-    const nilai = field === "nama" ? capitalizeWords(value) : value.toUpperCase();
-    setForm((f) => ({
-      ...f,
-      anggota: f.anggota.map((a, i) =>
-        i === index ? { ...a, [field]: nilai } : a,
+      anggota: f.anggota.map((a, idx) =>
+        idx === i ? { ...a, [key]: nilai } : a
       ),
     }));
-    hapusErrorAnggota();
-  };
 
-  const tambahAnggota = () => {
-    setForm((f) => ({ ...f, anggota: [...f.anggota, { nama: "", nim: "" }] }));
-    hapusErrorAnggota();
-  };
-
-  const hapusAnggota = (index) => {
-    setForm((f) => {
-      const sisa = f.anggota.filter((_, i) => i !== index);
-      // Jika semua anggota dihapus, kembali ke pengajuan individu
-      return { ...f, anggota: sisa, kelompok: sisa.length > 0 };
-    });
-    hapusErrorAnggota();
-  };
-
-  // ---------- Tempat magang ke-2 ----------
-  const tambahTempat2 = () => {
-    setForm((f) => ({
-      ...f,
-      tempat2: {
-        instansi: "",
-        alamat_instansi: "",
-        tanggal_mulai: "",
-        tanggal_selesai: "",
-      },
-    }));
-    setTempat2Terbuka(true);
-  };
-
-  const hapusTempat2 = () => {
-    setForm((f) => ({ ...f, tempat2: null }));
-    setErrors(({ tempat2, ...sisa }) => sisa);
-  };
-
-  const ubahTempat2 = (field, value) => {
-    let nilai = value;
-    if (field === "instansi") nilai = formatInstansi(value);
-    if (field === "alamat_instansi") nilai = formatSingkatan(value);
-    setForm((f) => ({ ...f, tempat2: { ...f.tempat2, [field]: nilai } }));
-    setErrors((er) => ({ ...er, tempat2: { ...er.tempat2, [field]: "" } }));
-  };
-
-  const rapikanTempat2 = (field) => () =>
-    setForm((f) =>
-      f.tempat2
-        ? {
-            ...f,
-            tempat2: { ...f.tempat2, [field]: rapikanTitik(f.tempat2[field]) },
-          }
-        : f,
+  const ubahNimAnggota = (i) => (e) =>
+    ubahAnggota(
+      i,
+      "nim",
+      e.target.value.toUpperCase().replace(/\s/g, "").slice(0, 11)
     );
 
-  const validate = (s) => {
-    const er = {};
-    if (s === 0) {
-      if (!form.nama.trim()) er.nama = "Nama lengkap wajib diisi.";
-      if (!form.nim.trim()) er.nim = "NIM wajib diisi.";
-      else if (!/^[A-Z0-9]{11}$/.test(form.nim.trim()))
-        er.nim = "NIM harus 11 karakter (huruf dan angka).";
-      if (!form.departemen)
-        er.departemen = "Departemen tidak dikenali dari NIM.";
+  const pilihanDepartemen = [
+    ...new Map(
+      [
+        ...opsiDepartemen,
+        ...Object.entries(NAMA_DEPARTEMEN).map(([kode, nama]) => ({
+          kode,
+          nama,
+        })),
+        form.departemen
+          ? { kode: form.departemen, nama: namaDepartemen(form.departemen) }
+          : null,
+      ]
+        .filter(Boolean)
+        .map((d) => [d.kode, d])
+    ).values(),
+  ].sort((a, b) => a.nama.localeCompare(b.nama, "id"));
 
-      if (form.kelompok) {
-        const errAnggota = {};
-        const nimTerpakai = new Set([form.nim.trim().toUpperCase()]);
+  async function simpanEdit() {
+    setError("");
+    setSukses("");
 
-        form.anggota.forEach((a, i) => {
-          const e = {};
-          const nim = a.nim.trim().toUpperCase();
+    const nama = form.nama.trim();
+    const nim = form.nim.trim();
+    const instansi = form.instansi.trim();
+    const alamat = form.alamat_instansi.trim();
 
-          if (!a.nama.trim()) e.nama = "Nama anggota wajib diisi.";
-
-          if (!nim) e.nim = "NIM anggota wajib diisi.";
-          else if (!/^[A-Z0-9]{11}$/.test(nim))
-            e.nim = "NIM harus 11 karakter (huruf dan angka).";
-          else if (nimTerpakai.has(nim))
-            e.nim = "NIM ini sudah dipakai di pengajuan ini.";
-          else nimTerpakai.add(nim);
-
-          if (Object.keys(e).length) errAnggota[i] = e;
-        });
-
-        if (Object.keys(errAnggota).length) er.anggota = errAnggota;
-      }
-    }
-    if (s === 1) {
-      if (!form.instansi.trim()) er.instansi = "Nama instansi wajib diisi.";
-      if (!form.alamat_instansi.trim())
-        er.alamat_instansi = "Alamat instansi wajib diisi.";
-      if (!form.tanggal_mulai) er.tanggal_mulai = "Tanggal mulai wajib diisi.";
-      if (!form.tanggal_selesai)
-        er.tanggal_selesai = "Tanggal selesai wajib diisi.";
-      else if (form.tanggal_mulai && form.tanggal_selesai <= form.tanggal_mulai)
-        er.tanggal_selesai =
-          "Tanggal selesai tidak boleh sebelum tanggal mulai.";
-
-      if (form.tempat2) {
-        const t = form.tempat2;
-        const e = {};
-        if (!t.instansi.trim()) e.instansi = "Nama instansi wajib diisi.";
-        if (!t.alamat_instansi.trim())
-          e.alamat_instansi = "Alamat instansi wajib diisi.";
-        if (!t.tanggal_mulai) e.tanggal_mulai = "Tanggal mulai wajib diisi.";
-        if (!t.tanggal_selesai)
-          e.tanggal_selesai = "Tanggal selesai wajib diisi.";
-        else if (t.tanggal_mulai && t.tanggal_selesai <= t.tanggal_mulai)
-          e.tanggal_selesai =
-            "Tanggal selesai tidak boleh sebelum tanggal mulai.";
-        if (Object.keys(e).length) er.tempat2 = e;
-      }
-    }
-    if (s === 2) {
-      if (!disetujui) er.ttd = "Tekan tombol Setujui terlebih dahulu.";
-    }
-    if (s === 3) {
-      const errSpp = validasiBerkas(form.bukti_spp, "Bukti SPP");
-      if (errSpp) er.bukti_spp = errSpp;
-
-      const errRekom = validasiBerkas(
-        form.surat_rekomendasi,
-        "Surat rekomendasi",
-      );
-      if (errRekom) er.surat_rekomendasi = errRekom;
-    }
-    return er;
-  };
-
-  const siapkanPengajuan = async () => {
-    const data = bentukData(form);
-    const snapshot = JSON.stringify(data);
-    if (pengajuanId.current && snapshotDraft.current === snapshot) return;
-
-    if (pengajuanId.current) {
-      await panggilApi(ENDPOINT.ubah(pengajuanId.current), {
-        json: data,
-        method: "PUT",
-      });
-      snapshotDraft.current = snapshot;
-      setDisetujui(false);
+    if (!nama || !nim || !form.departemen) {
+      setError("Nama, NIM, dan departemen wajib diisi.");
       return;
     }
 
-    const hasil = await panggilApi(ENDPOINT.buat, { json: data });
-    const id = hasil?.data?.id ?? hasil?.id ?? hasil?.pengajuan?.id;
-    if (!id)
-      throw new Error("ID pengajuan tidak ditemukan pada respons server.");
+    if (!instansi || !alamat) {
+      setError("Perusahaan tujuan dan alamat wajib diisi.");
+      return;
+    }
 
-    pengajuanId.current = id;
-    snapshotDraft.current = snapshot;
-    setDisetujui(false);
-  };
+    if (!form.tanggal_mulai || !form.tanggal_selesai) {
+      setError("Tanggal mulai dan tanggal selesai wajib diisi.");
+      return;
+    }
 
-  const next = async () => {
-    const er = validate(step);
-    setErrors(er);
-    if (er.tempat2) setTempat2Terbuka(true);
-    if (Object.keys(er).length) return;
+    if (form.tanggal_selesai < form.tanggal_mulai) {
+      setError("Tanggal selesai tidak boleh sebelum tanggal mulai.");
+      return;
+    }
 
-    setMsg(null);
-    if (step === 1) {
-      setLoading(true);
-      try {
-        await siapkanPengajuan();
-      } catch (err) {
-        setMsg({ type: "no", text: pesanDariError(err) });
-        setLoading(false);
+    if (
+      adaKelompok &&
+      form.anggota.some((a) => !String(a.nama).trim() || !String(a.nim).trim())
+    ) {
+      setError("Nama dan NIM setiap anggota kelompok wajib diisi.");
+      return;
+    }
+
+    if (item.tempat2) {
+      if (!form.instansi2.trim() || !form.alamat_instansi2.trim()) {
+        setError("Perusahaan tujuan 2 dan alamatnya wajib diisi.");
         return;
       }
-      setLoading(false);
+
+      if (!form.tanggal_mulai2 || !form.tanggal_selesai2) {
+        setError("Tanggal mulai dan selesai perusahaan 2 wajib diisi.");
+        return;
+      }
+
+      if (form.tanggal_selesai2 < form.tanggal_mulai2) {
+        setError("Tanggal selesai perusahaan 2 tidak boleh sebelum tanggal mulainya.");
+        return;
+      }
     }
-    setStep((s) => s + 1);
-  };
 
-  const back = () => {
-    setErrors({});
-    setMsg(null);
-    setStep((s) => s - 1);
-  };
+    setBusy(true);
 
-  const setujui = async () => {
-    setMenyetujui(true);
-    setErrors((er) => ({ ...er, ttd: "" }));
     try {
-      await panggilApi(ENDPOINT.tandaTangan(pengajuanId.current));
-      setDisetujui(true);
-      setVersiPreview((v) => v + 1);
-    } catch (err) {
-      setErrors((er) => ({ ...er, ttd: pesanDariError(err) }));
-    } finally {
-      setMenyetujui(false);
-    }
-  };
+      const response = await panggilApi(ENDPOINT.edit(item.id), {
+        method: METHOD_EDIT,
+        body: {
+          nama,
+          nim,
+          departemen: form.departemen,
+          instansi,
+          alamat_instansi: alamat,
+          tanggal_mulai: form.tanggal_mulai,
+          tanggal_selesai: form.tanggal_selesai,
+          ...(adaKelompok
+            ? {
+                [KEY_KIRIM_ANGGOTA]: form.anggota.map((a) => ({
+                  ...a,
+                  nama: String(a.nama).trim(),
+                  nim: String(a.nim).trim(),
+                })),
+              }
+            : {}),
+          ...(item.tempat2
+            ? {
+                instansi_kedua: form.instansi2.trim(),
+                alamat_instansi_kedua: form.alamat_instansi2.trim(),
+                tanggal_mulai_kedua: form.tanggal_mulai2,
+                tanggal_selesai_kedua: form.tanggal_selesai2,
+              }
+            : {}),
+        },
+      });
 
-  const batalSetujui = async () => {
-    setMenyetujui(true);
-    setErrors((er) => ({ ...er, ttd: "" }));
+      const updated = unwrap(response);
+      const pengajuan = updated?.pengajuan ?? updated;
+
+      if (!pengajuan || pengajuan.id == null) {
+        throw new Error(
+          "Data tersimpan, tetapi respons pengajuan tidak dikenali. Muat ulang halaman untuk memeriksa data."
+        );
+      }
+
+      const baru = normalisasiPengajuan(pengajuan);
+
+      onUpdated(baru);
+      setForm(formAwal({ ...item, ...baru }));
+      setSukses(response?.message || "Data pengajuan berhasil diperbarui.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function kirimStatus(body) {
+    setBusy(true);
+    setError("");
+    setSukses("");
+
     try {
-      await panggilApi(ENDPOINT.tandaTangan(pengajuanId.current), {
-        method: "DELETE",
+      const response = await panggilApi(ENDPOINT.status(item.id), {
+        method: "PATCH",
+        body,
       });
-      setDisetujui(false);
-      setVersiPreview((v) => v + 1);
+
+      const updated = unwrap(response);
+      const pengajuan = updated?.pengajuan ?? updated;
+
+      if (!pengajuan || pengajuan.id == null) {
+        throw new Error(
+          "Status berhasil dikirim, tetapi respons pengajuan tidak dikenali. Muat ulang halaman untuk memeriksa status."
+        );
+      }
+
+      onUpdated(normalisasiPengajuan(pengajuan));
     } catch (err) {
-      setErrors((er) => ({ ...er, ttd: pesanDariError(err) }));
+      setError(err.message);
     } finally {
-      setMenyetujui(false);
+      setBusy(false);
     }
-  };
+  }
 
-  const handleSubmit = async () => {
-    const er = validate(3);
-    setErrors(er);
-    if (Object.keys(er).length) return;
+  // ---------- Popup verifikasi / revisi / keluar ----------
+  function verifikasi() {
+    setDialog("verifikasi");
+  }
 
-    if (!pengajuanId.current) {
-      setMsg({
-        type: "no",
-        text: "Data pengajuan belum tersimpan. Kembali ke langkah sebelumnya.",
-      });
+  function konfirmasiVerifikasi() {
+    setDialog(null);
+    kirimStatus({ status: "setuju" });
+  }
+
+  function tolak() {
+    setCatatan("");
+    setErrCatatan("");
+    setDialog("revisi");
+  }
+
+  function konfirmasiRevisi() {
+    const alasan = catatan.trim();
+
+    if (!alasan) {
+      setErrCatatan("Catatan revisi wajib diisi.");
       return;
     }
 
-    const body = new FormData();
-    body.append("bukti_spp", form.bukti_spp);
-    body.append("surat_rekomendasi", form.surat_rekomendasi);
+    setDialog(null);
+    kirimStatus({ status: "revisi", catatan: alasan });
+  }
 
-    setLoading(true);
-    setMsg(null);
-    try {
-      await panggilApi(ENDPOINT.kirim(pengajuanId.current), { formData: body });
+  function tutupDialog() {
+    setDialog(null);
+  }
 
-      // Pengajuan terkirim: isi formulir tetap tersimpan sebagai riwayat
-      await muatRiwayat({
-        id: pengajuanId.current,
-        nama: form.nama,
-        nim: form.nim,
-        departemen: form.departemen,
-        anggota: form.kelompok ? form.anggota : [],
-        instansi: form.instansi,
-        alamat_instansi: form.alamat_instansi,
-        tanggal_mulai: form.tanggal_mulai,
-        tanggal_selesai: form.tanggal_selesai,
-        tempat_magang: bentukData(form).tempat_magang,
-        status: "menunggu_verifikasi",
-        dikirim_at: new Date().toISOString(),
-        berkasLokal: [
-          {
-            jenis: "bukti-spp",
-            label: LABEL_BERKAS["bukti-spp"],
-            ekstensi: (
-              form.bukti_spp.name.split(".").pop() || ""
-            ).toLowerCase(),
-            url: URL.createObjectURL(form.bukti_spp),
-          },
-          {
-            jenis: "surat-rekomendasi",
-            label: LABEL_BERKAS["surat-rekomendasi"],
-            ekstensi: (
-              form.surat_rekomendasi.name.split(".").pop() || ""
-            ).toLowerCase(),
-            url: URL.createObjectURL(form.surat_rekomendasi),
-          },
-        ],
-      });
+  // sufiks "" = instansi 1, "2" = instansi 2 (sesuai key di form)
+  function blokInstansi(sufiks, tampil) {
+    const key = (nama) => `${nama}${sufiks}`;
 
-      setBuatBaru(false);
-      setSedangRevisi(null);
-    } catch (err) {
-      setMsg({ type: "no", text: pesanDariError(err) });
-    } finally {
-      setLoading(false);
+    return (
+      <div className="grid gap-4 md:grid-cols-2">
+        <Kolom label="Perusahaan tujuan" edit={edit} value={tampil.instansi}>
+          <input
+            className={INPUT}
+            value={form[key("instansi")]}
+            onChange={ubah(key("instansi"))}
+            disabled={busy}
+          />
+        </Kolom>
+
+        <Kolom label="Alamat perusahaan" edit={edit} value={tampil.alamat}>
+          <input
+            className={INPUT}
+            value={form[key("alamat_instansi")]}
+            onChange={ubah(key("alamat_instansi"))}
+            disabled={busy}
+          />
+        </Kolom>
+
+        <Kolom
+          label="Tanggal mulai"
+          edit={edit}
+          value={formatTanggal(tampil.mulai)}
+        >
+          <input
+            type="date"
+            className={INPUT}
+            value={form[key("tanggal_mulai")]}
+            onChange={ubah(key("tanggal_mulai"))}
+            disabled={busy}
+          />
+        </Kolom>
+
+        <Kolom
+          label="Tanggal selesai"
+          edit={edit}
+          value={formatTanggal(tampil.selesai)}
+        >
+          <input
+            type="date"
+            className={INPUT}
+            value={form[key("tanggal_selesai")]}
+            min={form[key("tanggal_mulai")] || undefined}
+            onChange={ubah(key("tanggal_selesai"))}
+            disabled={busy}
+          />
+        </Kolom>
+      </div>
+    );
+  }
+
+  function kembali() {
+    if (berubah) {
+      setDialog("keluar");
+      return;
     }
-  };
 
-  // Mulai pengajuan baru: formulir dikosongkan, riwayat tetap ada
-  const mulaiBaru = () => {
-    pengajuanId.current = null;
-    snapshotDraft.current = "";
-    setForm(dataAwal);
-    setStep(0);
-    setErrors({});
-    setMsg(null);
-    setDisetujui(false);
-    setPreviews([]);
-    setVersiForm((v) => v + 1);
-    setSedangRevisi(null);
-    setBuatBaru(true);
-  };
-
-  // Perbaiki pengajuan yang diminta revisi: data lama dimuat kembali dan pengajuan yang SAMA diperbarui
-  const perbaiki = (item) => {
-    const anggotaLama = normalisasiAnggota(item.anggota);
-
-    const terisi = {
-      ...dataAwal,
-      kelompok: anggotaLama.length > 0,
-      anggota: anggotaLama,
-      instansi: item.instansi || "",
-      alamat_instansi: item.alamat && item.alamat !== "-" ? item.alamat : "",
-      tanggal_mulai: String(item.tanggal_mulai || "").slice(0, 10),
-      tanggal_selesai: String(item.tanggal_selesai || "").slice(0, 10),
-      tempat2: ambilTempat2(item),
-    };
-
-    pengajuanId.current = item.id;
-    snapshotDraft.current = JSON.stringify(bentukData(terisi));
-    setForm(terisi);
-    setStep(0);
-    setErrors({});
-    setMsg(null);
-    setDisetujui(Boolean(item.sudah_ditandatangani));
-    setPreviews([]);
-    setVersiForm((v) => v + 1);
-    setSedangRevisi({ id: item.id, catatan: item.catatan_revisi || "" });
-    setBuatBaru(true);
-  };
-
-  const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    window.location.href = "/login";
-  };
-
-  const dariDaftar =
-    riwayat.find((p) => String(p.id) === String(pilihId)) ?? null;
-  const aktif =
-    detail && String(detail.id) === String(pilihId)
-      ? { ...dariDaftar, ...detail }
-      : dariDaftar;
+    onClose();
+  }
 
   return (
-    <div className="min-h-screen bg-[#E6E6E6] text-[#404E3B]">
-      <header className="border-b border-[#BAC8B1] bg-white">
-        <div className="flex items-center justify-between gap-4 px-6 py-3 lg:px-40">
-          <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#404E3B] text-sm font-bold text-[#E6E6E6]">
-              SM
-            </span>
-            <span className="text-lg font-bold">SIMAGANG</span>
-          </div>
-          <button
-            type="button"
-            onClick={logout}
-            className="rounded-lg bg-[#404E3B] px-4 py-2 text-sm font-bold text-[#E6E6E6] transition hover:bg-[#BAC8B1] hover:text-[#404E3B]"
-          >
-            Log Out
-          </button>
+    <div className="flex min-h-screen flex-col bg-[#E6E6E6] text-[#404E3B] antialiased">
+      {/* HEADER */}
+      <header className="sticky top-0 z-20 border-b border-[#BAC8B1] bg-white/95 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-5xl items-center gap-4 px-4 py-4 sm:px-6">
+          <Button onClick={kembali}>← Kembali</Button>
+
+          <h1 className="truncate font-bold">
+            Pengajuan — {item.nama}
+          </h1>
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-4 py-8">
-        <h1 className="text-center text-3xl font-bold">
-          {tampilRiwayat
-            ? "Riwayat pengajuan"
-            : sedangRevisi
-              ? "Perbaiki pengajuan"
-              : "Formulir pengajuan"}
-        </h1>
-        <p className="mb-8 mt-2 text-center text-[#404E3B]">
-          {tampilRiwayat
-            ? "Pengajuan yang sudah kamu kirim tersimpan di sini beserta statusnya."
-            : "Pastikan semua data terisi dengan benar sebelum mengirim."}
-        </p>
+      {/* ISI */}
+      <main className="mx-auto w-full max-w-5xl flex-1 space-y-5 px-4 py-6 sm:px-6">
+        {/* Status & kontak */}
+        <div className="space-y-3 rounded-xl border border-[#BAC8B1] bg-white px-5 py-4 text-sm">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <span className="flex items-center gap-2">
+              <span className="opacity-70">Status</span>
+              <StatusBadge status={item.status} />
+            </span>
 
-        {memuatRiwayat && (
-          <div className="rounded-2xl bg-white p-8 text-center shadow-lg">
-            Memuat data...
+            {nomorSurat && (
+              <span className="flex items-center gap-2">
+                <span className="opacity-70">Nomor surat</span>
+                <b className="tabular-nums">{nomorSurat}</b>
+              </span>
+            )}
+          </div>
+
+          <div className="space-y-2 border-t border-[#E6E6E6] pt-3">
+            <div className="flex gap-2">
+              <span className="w-28 shrink-0 opacity-70">Email</span>
+              <span>:</span>
+
+              {email ? (
+                <a
+                  href={`mailto:${email}`}
+                  className="min-w-0 break-all underline-offset-2 hover:underline"
+                >
+                  {email}
+                </a>
+              ) : (
+                <span>-</span>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <span className="w-28 shrink-0 opacity-70">No. telepon</span>
+              <span>:</span>
+              <span className="tabular-nums">{hp || "-"}</span>
+            </div>
+
+            {linkWa && (
+              <a
+                href={linkWa}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 inline-flex rounded-lg border border-[#404E3B] px-4 py-2 text-sm font-bold text-[#404E3B] transition hover:bg-[#404E3B] hover:text-[#E6E6E6] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B9669]"
+              >
+                Hubungi via WhatsApp
+              </a>
+            )}
+          </div>
+        </div>
+
+        {status === "ditolak" && item.catatan_revisi && (
+          <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800">
+            <b>Catatan revisi:</b>
+            <p className="mt-1 whitespace-pre-line">{item.catatan_revisi}</p>
           </div>
         )}
 
-        {!memuatRiwayat && tampilRiwayat && aktif && (
-          <div className="space-y-6">
-            {riwayat.length > 1 && (
-              <div className="space-y-2">
-                {riwayat.map((p) => {
-                  const dipilih = String(p.id) === String(pilihId);
+        {/* 1. Data diri */}
+        <Section
+          judul={adaKelompok ? "1. Data diri dan kelompok" : "1. Data diri"}
+          keterangan={
+            edit
+              ? "Perubahan nama, NIM, dan departemen juga mengubah data akun mahasiswa."
+              : undefined
+          }
+        >
+          <div className="space-y-4">
+            {adaKelompok && <h3 className="text-sm font-bold">Ketua kelompok</h3>}
+            <div className="grid gap-4 md:grid-cols-2">
+              <Kolom label="Nama" edit={edit} value={item.nama}>
+                <input
+                  className={INPUT}
+                  value={form.nama}
+                  onChange={ubah("nama")}
+                  disabled={busy}
+                />
+              </Kolom>
 
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => setPilihId(p.id)}
-                      aria-pressed={dipilih}
-                      className={`flex w-full flex-wrap items-center justify-between gap-3 rounded-xl border px-5 py-4 text-left transition ${
-                        dipilih
-                          ? "border-[#404E3B] bg-white shadow-md"
-                          : "border-[#BAC8B1] bg-white/70 hover:bg-white"
-                      }`}
-                    >
-                      <span>
-                        <b className="block">{p.instansi || "-"}</b>
-                        <span className="text-xs opacity-70">
-                          Dikirim {formatTanggal(p.dikirim)}
-                        </span>
-                      </span>
-                      <StatusBadge status={p.status} />
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+              <Kolom label="NIM" edit={edit} value={item.nim}>
+                <input
+                  className={INPUT}
+                  value={form.nim}
+                  onChange={ubahNim}
+                  maxLength={11}
+                  disabled={busy}
+                />
+              </Kolom>
 
-            <div className="overflow-hidden rounded-2xl bg-white shadow-lg">
-              <div className="bg-gradient-to-r from-[#404E3B] to-[#7B9669] px-6 py-6 text-[#E6E6E6] sm:px-8">
-                <h2 className="text-xl font-bold">
-                  Formulir pengajuan surat pengantar magang
-                </h2>
-                <p className="mt-1 text-sm">
-                  Data di bawah adalah pengajuan yang sudah dikirim dan tidak
-                  dapat diubah.
-                </p>
-              </div>
-
-              <FormRiwayat
-                key={aktif.id}
-                item={aktif}
-                memuatDetail={memuatDetail}
-              />
-
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#BAC8B1] px-6 py-5 sm:px-8">
-                <p className="text-sm">
-                  {aktif.status === "revisi" &&
-                    "Pengajuan ini perlu diperbaiki. Perbaikan akan memperbarui pengajuan yang sama, bukan membuat yang baru."}
-                  {aktif.status === "menunggu_verifikasi" &&
-                    "Pengajuan sedang diverifikasi oleh admin."}
-                  {aktif.status === "setuju" &&
-                    "Pengajuan ini sudah disetujui."}
-                </p>
-
-                {aktif.status === "revisi" && (
-                  <Button
-                    type="button"
-                    onClick={() => perbaiki(aktif)}
-                    className="border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
-                  >
-                    Perbaiki pengajuan
-                  </Button>
-                )}
-
-                {aktif.status === "setuju" && !adaBerjalan && (
-                  <Button
-                    type="button"
-                    onClick={mulaiBaru}
-                    className="border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
-                  >
-                    Buat pengajuan baru
-                  </Button>
-                )}
-              </div>
+              <Kolom
+                label="Departemen"
+                edit={edit}
+                value={item.departemen}
+                className="md:col-span-2"
+              >
+                <select
+                  className={INPUT}
+                  value={form.departemen}
+                  onChange={ubah("departemen")}
+                  disabled={busy}
+                >
+                  <option value="">Pilih departemen</option>
+                  {pilihanDepartemen.map((dep) => (
+                    <option key={dep.kode} value={dep.kode}>
+                      {dep.nama}
+                    </option>
+                  ))}
+                </select>
+              </Kolom>
             </div>
           </div>
-        )}
 
-        {!memuatRiwayat && !tampilRiwayat && (
-          <>
-            {riwayat.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  setBuatBaru(false);
-                  setSedangRevisi(null);
-                }}
-                className="mb-4 text-sm font-semibold underline hover:text-[#7B9669]"
-              >
-                ← Kembali ke riwayat pengajuan
-              </button>
-            )}
-
-            {sedangRevisi?.catatan && (
-              <div className="mb-4 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800">
-                <b>Catatan revisi dari admin:</b>
-                <p className="mt-1 whitespace-pre-line">
-                  {sedangRevisi.catatan}
-                </p>
-              </div>
-            )}
-
-            <div
-              key={versiForm}
-              className="overflow-hidden rounded-2xl bg-white shadow-lg"
-            >
-              <div className="bg-gradient-to-r from-[#404E3B] to-[#7B9669] px-6 py-6 text-[#E6E6E6] sm:px-8">
-                <h2 className="text-xl font-bold">
-                  Formulir pengajuan surat pengantar magang
-                </h2>
-                <p className="mt-1 text-sm">
-                  {sedangRevisi
-                    ? `Perbaiki data pengajuan #${sedangRevisi.id}, lalu kirim ulang. Pengajuan yang sama akan diperbarui.`
-                    : "Lengkapi 4 langkah berikut. Surat akan diverifikasi admin sebelum diterbitkan resmi."}
-                </p>
+          {adaKelompok && (
+            <div className="space-y-4 border-t border-[#E6E6E6] pt-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-sm font-bold">
+                  Anggota kelompok ({daftarAnggota.length} orang)
+                </h3>
               </div>
 
-              <div className="p-6 sm:p-8">
-                <Stepper step={step} />
+              {daftarAnggota.length === 0 && (
+                <p className="text-sm text-[#5b6b55]">Belum ada anggota.</p>
+              )}
 
-                {step === 0 && (
-                  <div>
-                    <div className="grid gap-x-4 sm:grid-cols-2">
-                      <Field id="nama" label="Nama lengkap" error={errors.nama}>
-                        <TextInput
-                          id="nama"
-                          theme={inputTheme}
-                          value={form.nama}
-                          onChange={update("nama")}
-                          readOnly
-                          className="cursor-not-allowed"
-                          color={errors.nama ? "failure" : "gray"}
-                        />
-                      </Field>
-                      <Field id="nim" label="NIM" error={errors.nim}>
-                        <TextInput
-                          id="nim"
-                          theme={inputTheme}
-                          value={form.nim}
-                          onChange={update("nim")}
-                          readOnly
-                          className="cursor-not-allowed"
-                          maxLength={11}
-                          color={errors.nim ? "failure" : "gray"}
-                        />
-                      </Field>
-                    </div>
-                    <Field
-                      id="departemen"
-                      label="Departemen / program studi"
-                      error={errors.departemen}
-                    >
-                      <TextInput
-                        id="departemen"
-                        theme={inputTheme}
-                        value={form.departemen}
-                        readOnly
-                        className="cursor-not-allowed"
-                        color={errors.departemen ? "failure" : "gray"}
-                      />
-                    </Field>
+              {daftarAnggota.map((a, i) => (
+                <div
+                  key={i}
+                  className={`grid items-end gap-3 ${
+                    edit ? "md:grid-cols-2" : "md:grid-cols-3"
+                  }`}
+                >
+                  <Kolom label={`Nama anggota ${i + 1}`} edit={edit} value={a.nama}>
+                    <input
+                      className={INPUT}
+                      value={a.nama}
+                      onChange={(e) => ubahAnggota(i, "nama", e.target.value)}
+                      disabled={busy}
+                    />
+                  </Kolom>
 
-                    {/* Jenis pengajuan: individu / kelompok */}
-                    <div className="mb-4">
-                      <span className="mb-1 block text-sm font-semibold text-[#404E3B]">
-                        Jenis pengajuan
-                      </span>
-                      <div className="flex rounded-lg border border-[#7B9669] p-1">
-                        {[
-                          { nilai: false, label: "Individu" },
-                          { nilai: true, label: "Kelompok" },
-                        ].map((opsi) => (
-                          <button
-                            key={opsi.label}
-                            type="button"
-                            onClick={() => ubahJenis(opsi.nilai)}
-                            aria-pressed={form.kelompok === opsi.nilai}
-                            className={`flex-1 rounded-md py-2 text-center text-sm font-semibold transition ${
-                              form.kelompok === opsi.nilai
-                                ? "bg-[#404E3B] text-[#E6E6E6]"
-                                : "text-[#404E3B] hover:bg-[#BAC8B1]"
-                            }`}
-                          >
-                            {opsi.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                  <Kolom label={`NIM anggota ${i + 1}`} edit={edit} value={a.nim}>
+                    <input
+                      className={INPUT}
+                      value={a.nim}
+                      onChange={ubahNimAnggota(i)}
+                      maxLength={11}
+                      disabled={busy}
+                    />
+                  </Kolom>
 
-                    {form.kelompok && (
-                      <div className="mb-2">
-                        <div className="mb-2 flex items-center justify-between">
-                          <span className="text-sm font-semibold">
-                            Anggota kelompok
-                          </span>
-                          <span className="text-xs opacity-70">
-                            {form.anggota.length + 1} orang
-                          </span>
-                        </div>
-
-                        <p className="mb-3 text-xs opacity-70">
-                          Kamu terdaftar sebagai pengaju utama. Tambahkan nama
-                          dan NIM anggota lainnya.
-                        </p>
-
-                        {form.anggota.map((a, i) => (
-                          <div
-                            key={i}
-                            className="mb-3 rounded-lg border border-[#BAC8B1] p-4"
-                          >
-                            <div className="mb-2 flex items-center justify-between">
-                              <span className="text-sm font-semibold">
-                                Anggota {i + 2}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => hapusAnggota(i)}
-                                className="text-xs font-semibold text-[#b42318] underline"
-                              >
-                                Hapus
-                              </button>
-                            </div>
-
-                            <div className="grid gap-x-4 sm:grid-cols-2">
-                              <Field
-                                id={`anggota-nama-${i}`}
-                                label="Nama lengkap"
-                                error={errors.anggota?.[i]?.nama}
-                              >
-                                <TextInput
-                                  id={`anggota-nama-${i}`}
-                                  theme={inputTheme}
-                                  value={a.nama}
-                                  onChange={(e) =>
-                                    ubahAnggota(i, "nama", e.target.value)
-                                  }
-                                  placeholder="Nama lengkap anggota"
-                                  color={
-                                    errors.anggota?.[i]?.nama
-                                      ? "failure"
-                                      : "gray"
-                                  }
-                                />
-                              </Field>
-                              <Field
-                                id={`anggota-nim-${i}`}
-                                label="NIM"
-                                error={errors.anggota?.[i]?.nim}
-                              >
-                                <TextInput
-                                  id={`anggota-nim-${i}`}
-                                  theme={inputTheme}
-                                  value={a.nim}
-                                  onChange={(e) =>
-                                    ubahAnggota(i, "nim", e.target.value)
-                                  }
-                                  maxLength={11}
-                                  placeholder="NIM anggota"
-                                  color={
-                                    errors.anggota?.[i]?.nim
-                                      ? "failure"
-                                      : "gray"
-                                  }
-                                />
-                              </Field>
-                            </div>
-                          </div>
-                        ))}
-
-                        <button
-                          type="button"
-                          onClick={tambahAnggota}
-                          className="w-full rounded-lg border border-dashed border-[#7B9669] py-2 text-sm font-semibold text-[#404E3B] transition hover:bg-[#BAC8B1]"
-                        >
-                          + Tambah anggota
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {step === 1 && (
-                  <div>
-                    {form.tempat2 && (
-                      <p className="mb-2 text-sm font-semibold">
-                        Tempat magang 1
-                      </p>
-                    )}
-                    <Field
-                      id="instansi"
-                      label="Nama instansi / perusahaan"
-                      error={errors.instansi}
-                    >
-                      <TextInput
-                        id="instansi"
-                        theme={inputTheme}
-                        value={form.instansi}
-                        onChange={update("instansi")}
-                        onBlur={rapikan("instansi")}
-                        placeholder="cth. PT Maju Bersama"
-                        color={errors.instansi ? "failure" : "gray"}
-                      />
-                    </Field>
-                    <Field
-                      id="alamat_instansi"
-                      label="Alamat instansi"
-                      error={errors.alamat_instansi}
-                    >
-                      <Textarea
-                        id="alamat_instansi"
-                        theme={textareaTheme}
-                        rows={3}
-                        value={form.alamat_instansi}
-                        onChange={update("alamat_instansi")}
-                        onBlur={rapikan("alamat_instansi")}
-                        placeholder="Alamat lengkap instansi"
-                        color={errors.alamat_instansi ? "failure" : "gray"}
-                      />
-                    </Field>
-                    <div className="grid gap-x-4 sm:grid-cols-2">
-                      <Field
-                        id="tanggal_mulai"
-                        label="Tanggal mulai"
-                        error={errors.tanggal_mulai}
-                      >
-                        <TextInput
-                          id="tanggal_mulai"
-                          theme={inputTheme}
-                          type="date"
-                          value={form.tanggal_mulai}
-                          onChange={update("tanggal_mulai")}
-                          color={errors.tanggal_mulai ? "failure" : "gray"}
-                        />
-                      </Field>
-                      <Field
-                        id="tanggal_selesai"
-                        label="Tanggal selesai"
-                        error={errors.tanggal_selesai}
-                      >
-                        <TextInput
-                          id="tanggal_selesai"
-                          theme={inputTheme}
-                          type="date"
-                          value={form.tanggal_selesai}
-                          onChange={update("tanggal_selesai")}
-                          color={errors.tanggal_selesai ? "failure" : "gray"}
-                        />
-                      </Field>
-                    </div>
-
-                    {/* Tempat magang ke-2 (opsional) */}
-                    {form.tempat2 ? (
-                      <div className="mb-3 rounded-lg border border-[#BAC8B1]">
-                        <div className="flex items-center gap-2 px-4 py-3">
-                          <button
-                            type="button"
-                            onClick={() => setTempat2Terbuka((t) => !t)}
-                            aria-expanded={tempat2Terbuka}
-                            className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                          >
-                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#404E3B] text-xs font-semibold text-[#E6E6E6]">
-                              2
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <b className="block truncate text-sm">
-                                {form.tempat2.instansi.trim() ||
-                                  "Tempat magang 2"}
-                              </b>
-                              <span className="text-xs opacity-70">
-                                {form.tempat2.tanggal_mulai ||
-                                form.tempat2.tanggal_selesai
-                                  ? `${formatTanggal(form.tempat2.tanggal_mulai)} – ${formatTanggal(form.tempat2.tanggal_selesai)}`
-                                  : "Belum diisi"}
-                              </span>
-                            </span>
-                            <span aria-hidden="true" className="text-xs">
-                              {tempat2Terbuka ? "▲" : "▼"}
-                            </span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={hapusTempat2}
-                            className="text-xs font-semibold text-[#b42318] underline"
-                          >
-                            Hapus
-                          </button>
-                        </div>
-
-                        {tempat2Terbuka && (
-                          <div className="border-t border-[#BAC8B1] p-4">
-                            <Field
-                              id="t2-instansi"
-                              label="Nama instansi / perusahaan"
-                              error={errors.tempat2?.instansi}
-                            >
-                              <TextInput
-                                id="t2-instansi"
-                                theme={inputTheme}
-                                value={form.tempat2.instansi}
-                                onChange={(e) =>
-                                  ubahTempat2("instansi", e.target.value)
-                                }
-                                onBlur={rapikanTempat2("instansi")}
-                                placeholder="cth. PT Maju Bersama"
-                                color={
-                                  errors.tempat2?.instansi ? "failure" : "gray"
-                                }
-                              />
-                            </Field>
-                            <Field
-                              id="t2-alamat"
-                              label="Alamat instansi"
-                              error={errors.tempat2?.alamat_instansi}
-                            >
-                              <Textarea
-                                id="t2-alamat"
-                                theme={textareaTheme}
-                                rows={3}
-                                value={form.tempat2.alamat_instansi}
-                                onChange={(e) =>
-                                  ubahTempat2(
-                                    "alamat_instansi",
-                                    e.target.value,
-                                  )
-                                }
-                                onBlur={rapikanTempat2("alamat_instansi")}
-                                placeholder="Alamat lengkap instansi"
-                                color={
-                                  errors.tempat2?.alamat_instansi
-                                    ? "failure"
-                                    : "gray"
-                                }
-                              />
-                            </Field>
-                            <div className="grid gap-x-4 sm:grid-cols-2">
-                              <Field
-                                id="t2-mulai"
-                                label="Tanggal mulai"
-                                error={errors.tempat2?.tanggal_mulai}
-                              >
-                                <TextInput
-                                  id="t2-mulai"
-                                  theme={inputTheme}
-                                  type="date"
-                                  value={form.tempat2.tanggal_mulai}
-                                  onChange={(e) =>
-                                    ubahTempat2("tanggal_mulai", e.target.value)
-                                  }
-                                  color={
-                                    errors.tempat2?.tanggal_mulai
-                                      ? "failure"
-                                      : "gray"
-                                  }
-                                />
-                              </Field>
-                              <Field
-                                id="t2-selesai"
-                                label="Tanggal selesai"
-                                error={errors.tempat2?.tanggal_selesai}
-                              >
-                                <TextInput
-                                  id="t2-selesai"
-                                  theme={inputTheme}
-                                  type="date"
-                                  value={form.tempat2.tanggal_selesai}
-                                  onChange={(e) =>
-                                    ubahTempat2(
-                                      "tanggal_selesai",
-                                      e.target.value,
-                                    )
-                                  }
-                                  color={
-                                    errors.tempat2?.tanggal_selesai
-                                      ? "failure"
-                                      : "gray"
-                                  }
-                                />
-                              </Field>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={tambahTempat2}
-                        className="w-full rounded-lg border border-dashed border-[#7B9669] py-2 text-sm font-semibold text-[#404E3B] transition hover:bg-[#BAC8B1]"
-                      >
-                        + Tambah tempat magang
-                      </button>
-                    )}
-                    {form.tempat2 && (
-                      <p className="text-center text-xs opacity-70">
-                        Maksimal 2 tempat magang.
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {step === 2 && (
-                  <div>
-                    {jumlahSurat > 1 && (
-                      <p className="mb-4 text-sm opacity-80">
-                        Pengajuanmu memiliki {jumlahSurat} surat, satu untuk
-                        tiap instansi. Periksa semuanya sebelum menyetujui;
-                        satu persetujuan berlaku untuk semua surat.
-                      </p>
-                    )}
-
-                    {/* Semua surat langsung tampil berurutan (tanpa tab) */}
-                    {previews.map((p, i) => {
-                      const namaInstansi =
-                        i === 0 ? form.instansi : form.tempat2?.instansi;
-
-                      return (
-                        <div key={i} className="mb-6">
-                          {jumlahSurat > 1 && (
-                            <p className="mb-2 text-sm font-semibold">
-                              Surat {i + 1} dari {jumlahSurat}
-                              {namaInstansi?.trim()
-                                ? ` · ${namaInstansi.trim()}`
-                                : ""}
-                            </p>
-                          )}
-
-                          <div className="overflow-hidden rounded-lg border border-[#BAC8B1] bg-white">
-                            {p.loading && (
-                              <p className="p-6 text-sm">
-                                Memuat preview surat...
-                              </p>
-                            )}
-                            {p.error && (
-                              <div className="p-6">
-                                <p className="text-sm font-medium text-[#b42318]">
-                                  {p.error}
-                                </p>
-                                <button
-                                  type="button"
-                                  onClick={() => setVersiPreview((v) => v + 1)}
-                                  className="mt-2 text-sm font-semibold underline hover:text-[#7B9669]"
-                                >
-                                  Muat ulang preview
-                                </button>
-                              </div>
-                            )}
-                            {!p.loading &&
-                              !p.error &&
-                              (p.src || p.srcDoc) && (
-                                <iframe
-                                  title={`Preview surat ${i + 1}`}
-                                  src={
-                                    p.src
-                                      ? `${p.src}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`
-                                      : undefined
-                                  }
-                                  srcDoc={p.srcDoc || undefined}
-                                  className="w-full rounded-lg border border-[#BAC8B1] bg-white"
-                                  style={{ minHeight: 600 }}
-                                  onLoad={(e) => {
-                                    const doc = e.target.contentDocument;
-                                    if (doc && p.srcDoc) {
-                                      e.target.style.height =
-                                        doc.documentElement.scrollHeight + "px";
-                                    }
-                                  }}
-                                />
-                              )}
-                          </div>
-                        </div>
-                      );
-                    })}
-
-                    <Field id="ttd" label="Persetujuan" error={errors.ttd}>
-                      <p className="mb-3 text-sm">
-                        Periksa isi {jumlahSurat > 1 ? "kedua surat" : "surat"}{" "}
-                        di atas. Tekan Setujui untuk menandatangani{" "}
-                        {jumlahSurat > 1 ? "semua surat" : "surat"} dengan QR
-                        code.
-                      </p>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {disetujui ? (
-                          <>
-                            <span className="w-fit rounded-lg bg-[#BAC8B1] px-3 py-2 text-sm font-semibold">
-                              ✓ Surat sudah disetujui
-                            </span>
-                            <Button
-                              type="button"
-                              onClick={batalSetujui}
-                              className="w-fit border border-[#404E3B] bg-transparent font-bold text-[#404E3B] hover:bg-[#404E3B] hover:text-[#E6E6E6]"
-                            >
-                              Batal setujui
-                            </Button>
-                          </>
-                        ) : (
-                          <Button
-                            type="button"
-                            onClick={setujui}
-                            disabled={
-                              menyetujui ||
-                              previews.length === 0 ||
-                              previews.some((p) => p.loading || p.error)
-                            }
-                            className="w-fit border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
-                          >
-                            {menyetujui ? "Memproses..." : "Setujui"}
-                          </Button>
-                        )}
-                      </div>
-                    </Field>
-                  </div>
-                )}
-                {step === 3 && (
-                  <div>
-                    <Field
-                      id="bukti_spp"
-                      label="1. Upload File Detail SPP (PDF / JPG / PNG, maks. 2 MB)"
-                      error={errors.bukti_spp}
-                    >
-                      <FileInput
-                        id="bukti_spp"
-                        accept=".pdf,.jpg,.jpeg,.png"
-                        onChange={update("bukti_spp")}
-                        className="text-[#404E3B]"
-                      />
-                    </Field>
-
-                    <Field
-                      id="surat_rekomendasi"
-                      label="2. Upload Surat Rekomendasi Magang (PDF / JPG / PNG, maks. 2 MB)"
-                      error={errors.surat_rekomendasi}
-                    >
-                      <FileInput
-                        id="surat_rekomendasi"
-                        accept=".pdf,.jpg,.jpeg,.png"
-                        onChange={update("surat_rekomendasi")}
-                        className="text-[#404E3B]"
-                      />
-                    </Field>
-                  </div>
-                )}
-
-                {msg && (
-                  <Alert className="mt-4 border border-[#b42318] bg-[#ffd9d3] text-[#7a1f12]">
-                    {msg.text}
-                  </Alert>
-                )}
-
-                <div className="mt-6 flex items-center justify-between border-t border-[#BAC8B1] pt-5">
-                  {step > 0 ? (
-                    <Button
-                      type="button"
-                      onClick={back}
-                      disabled={loading}
-                      className="border border-[#7B9669] bg-white font-semibold text-[#404E3B] hover:bg-[#BAC8B1]"
-                    >
-                      ← Kembali
-                    </Button>
-                  ) : (
-                    <span />
-                  )}
-                  {step < STEPS.length - 1 ? (
-                    <Button
-                      type="button"
-                      onClick={next}
-                      disabled={loading}
-                      aria-disabled={belumSetuju}
-                      title={
-                        belumSetuju
-                          ? "Setujui surat terlebih dahulu"
-                          : undefined
-                      }
-                      className={`border-0 font-bold ${
-                        belumSetuju
-                          ? "cursor-not-allowed bg-gray-300 text-gray-500 hover:bg-gray-300 hover:text-gray-500"
-                          : "bg-[#404E3B] text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
-                      }`}
-                    >
-                      {loading ? "Menyimpan..." : "Lanjut →"}
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      onClick={handleSubmit}
-                      disabled={loading}
-                      className="border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
-                    >
-                      {loading ? "Mengirim..." : "Kirim pengajuan"}
-                    </Button>
+                  {!edit && (
+                    <Kolom label="Departemen" edit={false} value={a.departemen} />
                   )}
                 </div>
-              </div>
+              ))}
             </div>
-          </>
+          )}
+        </Section>
+
+        {/* 2. Instansi */}
+        <Section
+          judul="2. Instansi tujuan"
+          keterangan={
+            edit
+              ? "Surat pengantar dibuat dari data terbaru saat pengajuan diverifikasi."
+              : undefined
+          }
+        >
+          {item.tempat2 ? (
+            <>
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold">Instansi 1</h3>
+                {blokInstansi("", {
+                  instansi: item.instansi,
+                  alamat: item.alamat,
+                  mulai: item.tanggal_mulai,
+                  selesai: item.tanggal_selesai,
+                })}
+              </div>
+
+              <div className="space-y-4 border-t border-[#E6E6E6] pt-6">
+                <h3 className="text-sm font-bold">Instansi 2</h3>
+                {blokInstansi("2", {
+                  instansi: item.tempat2.instansi,
+                  alamat: item.tempat2.alamat_instansi,
+                  mulai: item.tempat2.tanggal_mulai,
+                  selesai: item.tempat2.tanggal_selesai,
+                })}
+              </div>
+            </>
+          ) : (
+            blokInstansi("", {
+              instansi: item.instansi,
+              alamat: item.alamat,
+              mulai: item.tanggal_mulai,
+              selesai: item.tanggal_selesai,
+            })
+          )}
+        </Section>
+
+        {/* 3. Berkas */}
+        <Section judul="3. Berkas">
+          {URUTAN_BERKAS.map((jenis) => {
+            const berkas = item.daftarBerkas.find((b) => b.jenis === jenis);
+
+            if (berkas) return <FilePreview key={jenis} berkas={berkas} />;
+            if (BERKAS_OPSIONAL.includes(jenis)) return null;
+
+            return <BerkasKosong key={jenis} label={LABEL_BERKAS[jenis]} />;
+          })}
+
+          {verified && suratMagang && <FilePreview berkas={suratMagang} />}
+
+          {verified && suratMagang2 && <FilePreview berkas={suratMagang2} />}
+        </Section>
+
+        {sukses && (
+          <div
+            role="status"
+            className="rounded-lg bg-[#D9F2D9] p-3 text-sm font-semibold text-[#1F6B2E]"
+          >
+            {sukses}
+          </div>
+        )}
+
+        {error && (
+          <div
+            role="alert"
+            className="whitespace-pre-line rounded-lg bg-red-100 p-3 text-sm font-semibold text-red-800"
+          >
+            {error}
+          </div>
         )}
       </main>
+
+      {/* TOMBOL AKSI (menempel di bawah layar) */}
+      <div className="sticky bottom-0 z-20 border-t border-[#BAC8B1] bg-white">
+        <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-end gap-2 px-4 py-4 sm:px-6">
+          {berubah && (
+            <span className="mr-auto text-xs font-semibold text-[#8A5A00]">
+              Ada perubahan yang belum disimpan. Simpan dulu sebelum verifikasi.
+            </span>
+          )}
+
+          {edit && (
+            <>
+              <Button disabled={busy || !berubah} onClick={resetForm}>
+                Reset
+              </Button>
+
+              <Button
+                variant="primary"
+                disabled={busy || !berubah}
+                onClick={simpanEdit}
+              >
+                {busy ? "Menyimpan..." : "Simpan perubahan"}
+              </Button>
+            </>
+          )}
+
+          {status === "menunggu" && (
+            <>
+              <Button variant="danger" disabled={busy || berubah} onClick={tolak}>
+                Tolak / minta revisi
+              </Button>
+
+              <Button
+                variant="primary"
+                disabled={busy || berubah}
+                onClick={verifikasi}
+              >
+                {busy ? "Memproses..." : "Verifikasi pengajuan"}
+              </Button>
+            </>
+          )}
+
+          {verified && suratMagang && (
+            <Button
+              variant="primary"
+              onClick={() =>
+                window.open(suratMagang.preview_url, "_blank", "noopener")
+              }
+            >
+              Buka / cetak surat pengantar
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* POPUP */}
+      {dialog === "verifikasi" && (
+        <Dialog judul="Verifikasi pengajuan ini?" onClose={tutupDialog}>
+          <p className="mt-2 text-sm text-[#5b6b55]">
+            Nomor surat akan dibuat otomatis dan surat pengantar diterbitkan.
+            Keputusan ini tidak dapat dibatalkan.
+          </p>
+
+          <div className="mt-6 flex justify-end gap-2">
+            <Button onClick={tutupDialog}>Batal</Button>
+            <Button variant="primary" onClick={konfirmasiVerifikasi}>
+              Ya, verifikasi
+            </Button>
+          </div>
+        </Dialog>
+      )}
+
+      {dialog === "revisi" && (
+        <Dialog judul="Minta mahasiswa merevisi" onClose={tutupDialog}>
+          <label className="mt-3 flex flex-col gap-1.5 text-sm">
+            <span className="font-medium opacity-70">
+              Catatan revisi untuk mahasiswa (wajib diisi)
+            </span>
+
+            <textarea
+              autoFocus
+              rows={4}
+              maxLength={1000}
+              className={INPUT}
+              value={catatan}
+              onChange={(e) => {
+                setCatatan(e.target.value);
+                setErrCatatan("");
+              }}
+              placeholder="Tuliskan bagian yang perlu diperbaiki..."
+            />
+          </label>
+
+          {errCatatan && (
+            <p className="mt-1 text-xs font-medium text-red-700">{errCatatan}</p>
+          )}
+
+          <div className="mt-6 flex justify-end gap-2">
+            <Button onClick={tutupDialog}>Batal</Button>
+            <Button variant="danger" onClick={konfirmasiRevisi}>
+              Kirim revisi
+            </Button>
+          </div>
+        </Dialog>
+      )}
+
+      {dialog === "keluar" && (
+        <Dialog judul="Perubahan belum disimpan" onClose={tutupDialog}>
+          <p className="mt-2 text-sm text-[#5b6b55]">
+            Ada perubahan yang belum disimpan. Jika kembali sekarang,
+            perubahan itu akan hilang.
+          </p>
+
+          <div className="mt-6 flex justify-end gap-2">
+            <Button onClick={tutupDialog}>Tetap di sini</Button>
+            <Button variant="danger" onClick={onClose}>
+              Kembali tanpa menyimpan
+            </Button>
+          </div>
+        </Dialog>
+      )}
     </div>
+  );
+}
+
+// =====================================================
+// HALAMAN DETAIL (route: /dashboard-admin/pengajuan/:id)
+// =====================================================
+
+export default function DetailPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+
+  const [item, setItem] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let batal = false;
+
+    setLoading(true);
+    setError("");
+
+    panggilApi(ENDPOINT.detail(id))
+      .then((response) => {
+        if (batal) return;
+
+        const detail = unwrap(response);
+
+        setItem(normalisasiPengajuan(detail?.pengajuan ?? detail));
+      })
+      .catch((err) => {
+        if (!batal) setError(err.message);
+      })
+      .finally(() => {
+        if (!batal) setLoading(false);
+      });
+
+    return () => {
+      batal = true;
+    };
+  }, [id]);
+
+  const kembali = () => navigate(PATH_DAFTAR);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#E6E6E6] text-[#404E3B]">
+        Memuat data pengajuan...
+      </div>
+    );
+  }
+
+  if (error || !item) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#E6E6E6] p-6 text-center">
+        <p className="whitespace-pre-line text-red-700">
+          {error || "Pengajuan tidak ditemukan."}
+        </p>
+
+        <Button onClick={kembali}>← Kembali ke daftar</Button>
+      </div>
+    );
+  }
+
+  return (
+    <DetailContent
+      key={item.id}
+      item={item}
+      onClose={kembali}
+      onUpdated={(baru) => setItem((prev) => ({ ...prev, ...baru }))}
+    />
   );
 }
