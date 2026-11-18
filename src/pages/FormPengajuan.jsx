@@ -8,7 +8,7 @@ import {
   TextInput,
 } from "flowbite-react";
 
-const API = "http://192.168.0.104:8000/api";
+const API = "http://172.18.160.171:8000/api";
 const ENDPOINT = {
   buat: "/pengajuan-magang", // POST = buat pengajuan, GET = daftar pengajuan milik mahasiswa
   ubah: (id) => `/pengajuan-magang/${id}`, // PUT = ubah, GET = detail
@@ -78,10 +78,10 @@ const formatSingkatan = (teks) =>
   });
 
 // Nama instansi: PT / CV / UD / PD ditulis tanpa titik
-// "pt.thudzahra" -> "PT Thudzahra", "PT. Maju" -> "PT Maju"
+// "pt.thudzahra" -> "PT Thudzahra", "PT. Maju" -> "PT Maju", "PT . Mayora" -> "PT Mayora"
 const formatInstansi = (teks) => {
   const tanpaTitik = teks.replace(
-    /(^|\s)(pt|cv|ud|pd)\.\s*/gi,
+    /(^|\s)(pt|cv|ud|pd)\s*\.\s*/gi,
     (_, awal, singkatan) => `${awal}${singkatan.toUpperCase()} `,
   );
   return formatSingkatan(tanpaTitik);
@@ -767,14 +767,8 @@ export default function FormPengajuan() {
   const [disetujui, setDisetujui] = useState(false);
   const [menyetujui, setMenyetujui] = useState(false);
   const [versiPreview, setVersiPreview] = useState(0);
-  // Surat instansi mana yang sedang dipreview di langkah tanda tangan (1 atau 2)
-  const [urutanPreview, setUrutanPreview] = useState(1);
-  const [preview, setPreview] = useState({
-    src: "",
-    srcDoc: "",
-    loading: false,
-    error: "",
-  });
+  // Satu entri per surat (satu surat per instansi); semuanya tampil bersamaan
+  const [previews, setPreviews] = useState([]);
 
   // Riwayat pengajuan yang sudah dikirim
   const [riwayat, setRiwayat] = useState([]);
@@ -788,8 +782,8 @@ export default function FormPengajuan() {
 
   const tampilRiwayat = riwayat.length > 0 && !buatBaru;
 
-  // Tanpa tempat magang kedua, preview selalu surat pertama
-  const urutanAktif = form.tempat2 ? urutanPreview : 1;
+  // Banyaknya surat = banyaknya instansi (1 atau 2)
+  const jumlahSurat = form.tempat2 ? 2 : 1;
 
   // Pengajuan yang masih berjalan (menunggu / perlu revisi): tidak boleh membuat pengajuan baru
   const adaBerjalan = riwayat.some(
@@ -871,42 +865,57 @@ export default function FormPengajuan() {
     };
   }, [pilihId, tampilRiwayat]);
 
-  // Preview surat di langkah tanda tangan; dimuat ulang saat tab instansi berganti
+  // Preview semua surat di langkah tanda tangan (instansi 1 dan 2 dimuat bersamaan)
   useEffect(() => {
     if (step !== 2 || !pengajuanId.current) return;
     let batal = false;
-    let objectUrl = "";
+    const objectUrls = [];
 
-    setPreview({ src: "", srcDoc: "", loading: true, error: "" });
-    ambilPreview(pengajuanId.current, urutanAktif)
-      .then((hasil) => {
-        if (batal) {
-          if (hasil.objectUrl) URL.revokeObjectURL(hasil.objectUrl);
-          return;
-        }
-        objectUrl = hasil.objectUrl || "";
-        setPreview({
-          src: hasil.src || "",
-          srcDoc: hasil.srcDoc || "",
-          loading: false,
-          error: "",
-        });
-      })
-      .catch((err) => {
-        if (!batal)
-          setPreview({
-            src: "",
-            srcDoc: "",
+    const ubahSurat = (index, nilai) =>
+      setPreviews((prev) => prev.map((p, i) => (i === index ? nilai : p)));
+
+    setPreviews(
+      Array.from({ length: jumlahSurat }, () => ({
+        src: "",
+        srcDoc: "",
+        loading: true,
+        error: "",
+      })),
+    );
+
+    for (let urutan = 1; urutan <= jumlahSurat; urutan += 1) {
+      const index = urutan - 1;
+
+      ambilPreview(pengajuanId.current, urutan)
+        .then((hasil) => {
+          if (batal) {
+            if (hasil.objectUrl) URL.revokeObjectURL(hasil.objectUrl);
+            return;
+          }
+          if (hasil.objectUrl) objectUrls.push(hasil.objectUrl);
+          ubahSurat(index, {
+            src: hasil.src || "",
+            srcDoc: hasil.srcDoc || "",
             loading: false,
-            error: pesanDariError(err),
+            error: "",
           });
-      });
+        })
+        .catch((err) => {
+          if (!batal)
+            ubahSurat(index, {
+              src: "",
+              srcDoc: "",
+              loading: false,
+              error: pesanDariError(err),
+            });
+        });
+    }
 
     return () => {
       batal = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrls.forEach((u) => URL.revokeObjectURL(u));
     };
-  }, [step, versiPreview, urutanAktif]);
+  }, [step, versiPreview, jumlahSurat]);
 
   const update = (field) => (e) => {
     let value = e.target.files ? e.target.files[0] || null : e.target.value;
@@ -980,7 +989,6 @@ export default function FormPengajuan() {
   const hapusTempat2 = () => {
     setForm((f) => ({ ...f, tempat2: null }));
     setErrors(({ tempat2, ...sisa }) => sisa);
-    setUrutanPreview(1);
   };
 
   const ubahTempat2 = (field, value) => {
@@ -1118,7 +1126,6 @@ export default function FormPengajuan() {
         return;
       }
       setLoading(false);
-      setUrutanPreview(1); // selalu mulai dari surat instansi pertama
     }
     setStep((s) => s + 1);
   };
@@ -1233,8 +1240,7 @@ export default function FormPengajuan() {
     setErrors({});
     setMsg(null);
     setDisetujui(false);
-    setUrutanPreview(1);
-    setPreview({ src: "", srcDoc: "", loading: false, error: "" });
+    setPreviews([]);
     setVersiForm((v) => v + 1);
     setSedangRevisi(null);
     setBuatBaru(true);
@@ -1262,8 +1268,7 @@ export default function FormPengajuan() {
     setErrors({});
     setMsg(null);
     setDisetujui(Boolean(item.sudah_ditandatangani));
-    setUrutanPreview(1);
-    setPreview({ src: "", srcDoc: "", loading: false, error: "" });
+    setPreviews([]);
     setVersiForm((v) => v + 1);
     setSedangRevisi({ id: item.id, catatan: item.catatan_revisi || "" });
     setBuatBaru(true);
@@ -1828,93 +1833,83 @@ export default function FormPengajuan() {
 
                 {step === 2 && (
                   <div>
-                    {/* Tab untuk berpindah antara surat instansi 1 dan 2 */}
-                    {form.tempat2 && (
-                      <div className="mb-3">
-                        <div
-                          role="tablist"
-                          aria-label="Pilih surat yang dipreview"
-                          className="flex rounded-lg border border-[#7B9669] p-1"
-                        >
-                          {[
-                            { urutan: 1, nama: form.instansi },
-                            { urutan: 2, nama: form.tempat2.instansi },
-                          ].map((tab) => (
-                            <button
-                              key={tab.urutan}
-                              type="button"
-                              role="tab"
-                              aria-selected={urutanAktif === tab.urutan}
-                              onClick={() => setUrutanPreview(tab.urutan)}
-                              className={`min-w-0 flex-1 rounded-md px-3 py-2 text-center text-sm font-semibold transition ${
-                                urutanAktif === tab.urutan
-                                  ? "bg-[#404E3B] text-[#E6E6E6]"
-                                  : "text-[#404E3B] hover:bg-[#BAC8B1]"
-                              }`}
-                            >
-                              <span className="block">
-                                Surat instansi {tab.urutan}
-                              </span>
-                              <span className="block truncate text-xs font-normal opacity-80">
-                                {tab.nama.trim() || "-"}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                        <p className="mt-2 text-xs opacity-70">
-                          Pengajuanmu memiliki 2 surat. Periksa keduanya
-                          sebelum menyetujui; satu persetujuan berlaku untuk
-                          kedua surat.
-                        </p>
-                      </div>
+                    {jumlahSurat > 1 && (
+                      <p className="mb-4 text-sm opacity-80">
+                        Pengajuanmu memiliki {jumlahSurat} surat, satu untuk
+                        tiap instansi. Periksa semuanya sebelum menyetujui;
+                        satu persetujuan berlaku untuk semua surat.
+                      </p>
                     )}
 
-                    <div className="mb-4 overflow-hidden rounded-lg border border-[#BAC8B1] bg-white">
-                      {preview.loading && (
-                        <p className="p-6 text-sm">Memuat preview surat...</p>
-                      )}
-                      {preview.error && (
-                        <div className="p-6">
-                          <p className="text-sm font-medium text-[#b42318]">
-                            {preview.error}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => setVersiPreview((v) => v + 1)}
-                            className="mt-2 text-sm font-semibold underline hover:text-[#7B9669]"
-                          >
-                            Muat ulang preview
-                          </button>
+                    {/* Semua surat langsung tampil berurutan (tanpa tab) */}
+                    {previews.map((p, i) => {
+                      const namaInstansi =
+                        i === 0 ? form.instansi : form.tempat2?.instansi;
+
+                      return (
+                        <div key={i} className="mb-6">
+                          {jumlahSurat > 1 && (
+                            <p className="mb-2 text-sm font-semibold">
+                              Surat {i + 1} dari {jumlahSurat}
+                              {namaInstansi?.trim()
+                                ? ` · ${namaInstansi.trim()}`
+                                : ""}
+                            </p>
+                          )}
+
+                          <div className="overflow-hidden rounded-lg border border-[#BAC8B1] bg-white">
+                            {p.loading && (
+                              <p className="p-6 text-sm">
+                                Memuat preview surat...
+                              </p>
+                            )}
+                            {p.error && (
+                              <div className="p-6">
+                                <p className="text-sm font-medium text-[#b42318]">
+                                  {p.error}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => setVersiPreview((v) => v + 1)}
+                                  className="mt-2 text-sm font-semibold underline hover:text-[#7B9669]"
+                                >
+                                  Muat ulang preview
+                                </button>
+                              </div>
+                            )}
+                            {!p.loading &&
+                              !p.error &&
+                              (p.src || p.srcDoc) && (
+                                <iframe
+                                  title={`Preview surat ${i + 1}`}
+                                  src={
+                                    p.src
+                                      ? `${p.src}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`
+                                      : undefined
+                                  }
+                                  srcDoc={p.srcDoc || undefined}
+                                  className="w-full rounded-lg border border-[#BAC8B1] bg-white"
+                                  style={{ minHeight: 600 }}
+                                  onLoad={(e) => {
+                                    const doc = e.target.contentDocument;
+                                    if (doc && p.srcDoc) {
+                                      e.target.style.height =
+                                        doc.documentElement.scrollHeight + "px";
+                                    }
+                                  }}
+                                />
+                              )}
+                          </div>
                         </div>
-                      )}
-                      {!preview.loading &&
-                        !preview.error &&
-                        (preview.src || preview.srcDoc) && (
-                          <iframe
-                            title={`Preview surat instansi ${urutanAktif}`}
-                            src={
-                              preview.src
-                                ? `${preview.src}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`
-                                : undefined
-                            }
-                            srcDoc={preview.srcDoc || undefined}
-                            className="w-full rounded-lg border border-[#BAC8B1] bg-white"
-                            style={{ minHeight: 600 }}
-                            onLoad={(e) => {
-                              const doc = e.target.contentDocument;
-                              if (doc && preview.srcDoc) {
-                                e.target.style.height =
-                                  doc.documentElement.scrollHeight + "px";
-                              }
-                            }}
-                          />
-                        )}
-                    </div>
+                      );
+                    })}
 
                     <Field id="ttd" label="Persetujuan" error={errors.ttd}>
                       <p className="mb-3 text-sm">
-                        Periksa isi surat di atas. Tekan Setujui untuk
-                        menandatangani surat dengan QR code.
+                        Periksa isi {jumlahSurat > 1 ? "kedua surat" : "surat"}{" "}
+                        di atas. Tekan Setujui untuk menandatangani{" "}
+                        {jumlahSurat > 1 ? "semua surat" : "surat"} dengan QR
+                        code.
                       </p>
                       <div className="flex flex-wrap items-center gap-2">
                         {disetujui ? (
@@ -1935,7 +1930,9 @@ export default function FormPengajuan() {
                             type="button"
                             onClick={setujui}
                             disabled={
-                              menyetujui || preview.loading || !!preview.error
+                              menyetujui ||
+                              previews.length === 0 ||
+                              previews.some((p) => p.loading || p.error)
                             }
                             className="w-fit border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
                           >

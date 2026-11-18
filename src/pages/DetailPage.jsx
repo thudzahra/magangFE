@@ -211,7 +211,7 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
   const [error, setError] = useState("");
   const [sukses, setSukses] = useState("");
 
-  // BARU: urutan surat (1/2) yang sedang dibuatkan link WhatsApp-nya, null bila tidak ada
+  // Urutan surat (1/2) yang sedang dibuatkan link WhatsApp-nya, null bila tidak ada
   const [waBusy, setWaBusy] = useState(null);
 
   const [form, setForm] = useState(() => formAwal(item));
@@ -229,6 +229,12 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
   const hp = cariNilai(item, KEY_HP);
   const email = cariNilai(item, KEY_EMAIL);
   const tujuanWa = nomorWa(hp);
+
+  // Peringatan pengajuan berulang, dari PengajuanMagangAdminResource:
+  // pengajuan_mahasiswa: { jumlah, ambang, perlu_peringatan }.
+  // Hanya peringatan untuk admin, tidak memblokir verifikasi.
+  const jumlahPengajuan = Number(item.pengajuan_mahasiswa?.jumlah ?? 0);
+  const pengajuanBerulang = Boolean(item.pengajuan_mahasiswa?.perlu_peringatan);
 
   // Link kontak biasa (sapaan singkat). Hanya dipakai SEBELUM pengajuan diverifikasi.
   // Setelah diverifikasi, pesan dibuat backend lewat kirimSuratWa().
@@ -438,7 +444,7 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
     }
   }
 
-  // BARU: minta backend membuat pesan + link unduh sementara, lalu buka WhatsApp.
+  // Minta backend membuat pesan + link unduh sementara, lalu buka WhatsApp.
   // Pesan TIDAK terkirim otomatis: admin menekan kirim sendiri di WhatsApp.
   // urutan: 1 = surat instansi pertama, 2 = surat instansi kedua.
   async function kirimSuratWa(urutan) {
@@ -643,7 +649,7 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
               </a>
             )}
 
-            {/* BARU: setelah diverifikasi, kirim surat via WhatsApp (pesan dibuat backend) */}
+            {/* Setelah diverifikasi, kirim surat via WhatsApp (pesan dibuat backend) */}
             {verified && (suratMagang || suratMagang2) && (
               <div className="mt-1 flex flex-wrap gap-2">
                 {suratMagang && (
@@ -687,6 +693,28 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
             )}
           </div>
         </div>
+
+        {/* PERINGATAN: NIM ini sudah beberapa kali mengajukan */}
+        {pengajuanBerulang && (
+          <div
+            role="alert"
+            className="flex items-start gap-3 rounded-xl border border-[#E8C766] bg-[#FDEFC3] px-5 py-4 text-sm text-[#8A5A00]"
+          >
+            <span aria-hidden="true" className="text-lg leading-none">
+              ⚠
+            </span>
+            <div>
+              <b>
+                Mahasiswa ini sudah {jumlahPengajuan}x melakukan pengajuan.
+              </b>
+              <p className="mt-0.5">
+                NIM {item.nim} tercatat telah mengirim {jumlahPengajuan}{" "}
+                pengajuan (termasuk pengajuan ini). Periksa dahulu sebelum
+                memverifikasi.
+              </p>
+            </div>
+          </div>
+        )}
 
         {status === "ditolak" && item.catatan_revisi && (
           <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800">
@@ -933,6 +961,13 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
             Nomor surat akan dibuat otomatis dan surat pengantar diterbitkan.
             Keputusan ini tidak dapat dibatalkan.
           </p>
+
+          {pengajuanBerulang && (
+            <p className="mt-3 rounded-lg bg-[#FDEFC3] px-3 py-2 text-sm font-semibold text-[#8A5A00]">
+              Perhatian: mahasiswa ini sudah {jumlahPengajuan}x melakukan
+              pengajuan.
+            </p>
+          )}
 
           <div className="mt-6 flex justify-end gap-2">
             <Button onClick={tutupDialog}>Batal</Button>

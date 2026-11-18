@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 const API = (
   import.meta.env.VITE_API_URL ||
-  "http://192.168.0.104:8000/api"
+  "http://172.18.160.171:8000/api"
 ).replace(/\/+$/, "");
 
 export const ENDPOINT = {
