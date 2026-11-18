@@ -47,10 +47,11 @@ const STEPS = ["Data diri", "Tempat magang", "Tanda tangan", "Berkas & kirim"];
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 const EKSTENSI_BOLEH = ["pdf", "jpg", "jpeg", "png"];
 
+// Semua input (TextInput & Textarea) berlatar putih
 const colors = {
-  gray: "border-[#7B9669] bg-[#E6E6E6] text-[#404E3B] placeholder-[#7a8575] focus:border-[#404E3B] focus:ring-[#7B9669]",
+  gray: "border-[#7B9669] bg-white text-[#404E3B] placeholder-[#7a8575] focus:border-[#404E3B] focus:ring-[#7B9669]",
   failure:
-    "border-[#b42318] bg-[#E6E6E6] text-[#404E3B] placeholder-[#7a8575] focus:border-[#b42318] focus:ring-[#b42318]",
+    "border-[#b42318] bg-white text-[#404E3B] placeholder-[#7a8575] focus:border-[#b42318] focus:ring-[#b42318]",
 };
 const inputTheme = { field: { input: { colors } } };
 const textareaTheme = { colors };
@@ -199,10 +200,6 @@ const bentukData = (f) => ({
     : [],
 });
 
-// =====================================================
-// DATA RIWAYAT
-// =====================================================
-
 const unwrap = (response) => response?.data ?? response;
 
 const toArray = (response) => {
@@ -245,7 +242,7 @@ const normalisasiStatus = (status) => {
 const STATUS = {
   menunggu_verifikasi: {
     label: "Menunggu verifikasi",
-    className: "bg-[#BAC8B1] text-[#404E3B]",
+    className: "bg-[#FDEFC3] text-[#8A5A00]",
   },
   setuju: { label: "Disetujui", className: "bg-[#404E3B] text-[#E6E6E6]" },
   revisi: { label: "Perlu revisi", className: "bg-red-100 text-red-800" },
@@ -501,7 +498,7 @@ function FormRiwayat({ item, memuatDetail }) {
     <div className="p-6 sm:p-8">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="font-bold">Pengajuan #{item.id}</p>
+          <p className="font-bold">Pengajuan - {item.nama}</p>
           <p className="text-xs opacity-70">
             Dikirim {formatTanggal(item.dikirim)}
           </p>
@@ -545,7 +542,7 @@ function FormRiwayat({ item, memuatDetail }) {
             theme={inputTheme}
             value={item.nama}
             readOnly
-            color="gray"
+            color="white"
             className="cursor-default"
           />
         </Field>
@@ -555,7 +552,7 @@ function FormRiwayat({ item, memuatDetail }) {
             theme={inputTheme}
             value={item.nim}
             readOnly
-            color="gray"
+            color="white"
             className="cursor-default"
           />
         </Field>
@@ -567,7 +564,7 @@ function FormRiwayat({ item, memuatDetail }) {
           theme={inputTheme}
           value={item.departemen}
           readOnly
-          color="gray"
+          color="white"
           className="cursor-default"
         />
       </Field>
@@ -603,7 +600,7 @@ function FormRiwayat({ item, memuatDetail }) {
           theme={inputTheme}
           value={item.instansi || "-"}
           readOnly
-          color="gray"
+          color="white"
           className="cursor-default"
         />
       </Field>
@@ -615,7 +612,7 @@ function FormRiwayat({ item, memuatDetail }) {
           rows={3}
           value={item.alamat}
           readOnly
-          color="gray"
+          color="white"
           className="cursor-default"
         />
       </Field>
@@ -627,7 +624,7 @@ function FormRiwayat({ item, memuatDetail }) {
             theme={inputTheme}
             value={formatTanggal(item.tanggal_mulai)}
             readOnly
-            color="gray"
+            color="white"
             className="cursor-default"
           />
         </Field>
@@ -637,7 +634,7 @@ function FormRiwayat({ item, memuatDetail }) {
             theme={inputTheme}
             value={formatTanggal(item.tanggal_selesai)}
             readOnly
-            color="gray"
+            color="white"
             className="cursor-default"
           />
         </Field>
@@ -652,7 +649,7 @@ function FormRiwayat({ item, memuatDetail }) {
               theme={inputTheme}
               value={tempat2.instansi || "-"}
               readOnly
-              color="gray"
+              color="white"
               className="cursor-default"
             />
           </Field>
@@ -663,7 +660,7 @@ function FormRiwayat({ item, memuatDetail }) {
               rows={3}
               value={tempat2.alamat_instansi}
               readOnly
-              color="gray"
+              color="white"
               className="cursor-default"
             />
           </Field>
@@ -674,7 +671,7 @@ function FormRiwayat({ item, memuatDetail }) {
                 theme={inputTheme}
                 value={formatTanggal(tempat2.tanggal_mulai)}
                 readOnly
-                color="gray"
+                color="white"
                 className="cursor-default"
               />
             </Field>
@@ -684,7 +681,7 @@ function FormRiwayat({ item, memuatDetail }) {
                 theme={inputTheme}
                 value={formatTanggal(tempat2.tanggal_selesai)}
                 readOnly
-                color="gray"
+                color="white"
                 className="cursor-default"
               />
             </Field>
@@ -1429,7 +1426,7 @@ export default function FormPengajuan() {
                           value={form.nama}
                           onChange={update("nama")}
                           readOnly
-                          className="cursor-not-allowed opacity-80"
+                          className="cursor-not-allowed"
                           color={errors.nama ? "failure" : "gray"}
                         />
                       </Field>
@@ -1440,7 +1437,7 @@ export default function FormPengajuan() {
                           value={form.nim}
                           onChange={update("nim")}
                           readOnly
-                          className="cursor-not-allowed opacity-80"
+                          className="cursor-not-allowed"
                           maxLength={11}
                           color={errors.nim ? "failure" : "gray"}
                         />
@@ -1456,7 +1453,7 @@ export default function FormPengajuan() {
                         theme={inputTheme}
                         value={form.departemen}
                         readOnly
-                        className="cursor-not-allowed opacity-80"
+                        className="cursor-not-allowed"
                         color={errors.departemen ? "failure" : "gray"}
                       />
                     </Field>
