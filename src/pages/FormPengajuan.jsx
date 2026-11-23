@@ -32,7 +32,7 @@ const departemenDariNim = (nim) =>
 const NAMA_DEPARTEMEN = {
   MNH: "Manajemen Hutan",
   THH: "Teknologi Hasil Hutan",
-  KSHE: "Konservasi Sumber Daya Hutan dan Ekowisata",
+  KSHE: "Konservasi Sumberdaya Hutan Dan Ekowisata",
   SVK: "Silvikultur",
 };
 
@@ -44,7 +44,7 @@ const namaDep = (dep) => {
   return NAMA_DEPARTEMEN[dep] ?? String(dep);
 };
 
-const STEPS = ["Data diri", "Tempat magang", "Tanda tangan", "Berkas & kirim"];
+const STEPS = ["Data Diri", "Tempat Magang", "Tanda Tangan", "Berkas & Kirim"];
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 const EKSTENSI_BOLEH = ["pdf", "jpg", "jpeg", "png"];
@@ -78,10 +78,10 @@ const formatSingkatan = (teks) =>
   });
 
 // Nama instansi: PT / CV / UD / PD ditulis tanpa titik
-// "pt.thudzahra" -> "PT Thudzahra", "PT. Maju" -> "PT Maju"
+// "pt.thudzahra" -> "PT Thudzahra", "PT. Maju" -> "PT Maju", "PT . Mayora" -> "PT Mayora"
 const formatInstansi = (teks) => {
   const tanpaTitik = teks.replace(
-    /(^|\s)(pt|cv|ud|pd)\.\s*/gi,
+    /(^|\s)(pt|cv|ud|pd)\s*\.\s*/gi,
     (_, awal, singkatan) => `${awal}${singkatan.toUpperCase()} `,
   );
   return formatSingkatan(tanpaTitik);
@@ -103,15 +103,18 @@ const authHeaders = () => ({
   Authorization: `Bearer ${localStorage.getItem("token")}`,
 });
 
+// Pesan dari server (dan pesan error lain) juga ditampilkan dengan huruf awal kapital
 const pesanError = (data, fallback) => {
   if (data?.errors) {
-    return Object.values(data.errors).flat().join(" ");
+    return capitalizeWords(Object.values(data.errors).flat().join(" "));
   }
-  return data?.message || fallback;
+  return capitalizeWords(data?.message || fallback);
 };
 
 const pesanDariError = (err) =>
-  err instanceof TypeError ? "Tidak dapat terhubung ke server." : err.message;
+  err instanceof TypeError
+    ? "Tidak Dapat Terhubung Ke Server."
+    : capitalizeWords(String(err.message ?? ""));
 
 const panggilApi = async (path, { json, formData, method = "POST" } = {}) => {
   const response = await fetch(`${API}${path}`, {
@@ -122,7 +125,7 @@ const panggilApi = async (path, { json, formData, method = "POST" } = {}) => {
     body: json ? JSON.stringify(json) : formData,
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(pesanError(data, "Permintaan gagal."));
+  if (!response.ok) throw new Error(pesanError(data, "Permintaan Gagal."));
   return data;
 };
 
@@ -137,7 +140,7 @@ const ambilPreview = async (id, urutan = 1) => {
     const data = type.includes("application/json")
       ? await response.json().catch(() => ({}))
       : {};
-    throw new Error(pesanError(data, "Preview surat gagal dimuat."));
+    throw new Error(pesanError(data, "Preview Surat Gagal Dimuat."));
   }
 
   if (type.includes("application/json")) {
@@ -146,7 +149,7 @@ const ambilPreview = async (id, urutan = 1) => {
     if (html) return { srcDoc: html };
     const url = data.url ?? data.data?.url;
     if (url) return { src: url };
-    throw new Error("Format respons preview surat tidak dikenali.");
+    throw new Error("Format Respons Preview Surat Tidak Dikenali.");
   }
 
   const blob = await response.blob();
@@ -155,11 +158,11 @@ const ambilPreview = async (id, urutan = 1) => {
 };
 
 const validasiBerkas = (file, namaBerkas) => {
-  if (!file) return `${namaBerkas} wajib diunggah.`;
-  if (file.size > MAX_FILE_SIZE) return "Ukuran file maksimal 2 MB.";
+  if (!file) return `${namaBerkas} Wajib Diunggah.`;
+  if (file.size > MAX_FILE_SIZE) return "Ukuran File Maksimal 2 MB.";
   const ext = (file.name.split(".").pop() || "").toLowerCase();
   if (!EKSTENSI_BOLEH.includes(ext))
-    return "Format file harus PDF, JPG, atau PNG.";
+    return "Format File Harus PDF, JPG, Atau PNG.";
   return "";
 };
 
@@ -244,15 +247,15 @@ const normalisasiStatus = (status) => {
 
 const STATUS = {
   menunggu_verifikasi: {
-    label: "Menunggu verifikasi",
+    label: "Menunggu Verifikasi",
     className: "bg-[#FDEFC3] text-[#8A5A00]",
   },
   setuju: { label: "Disetujui", className: "bg-[#404E3B] text-[#E6E6E6]" },
-  revisi: { label: "Perlu revisi", className: "bg-red-100 text-red-800" },
+  revisi: { label: "Perlu Revisi", className: "bg-red-100 text-red-800" },
 };
 
 const LABEL_BERKAS = {
-  "surat-pengajuan": "Form pengajuan magang",
+  "surat-pengajuan": "Form pengajuan magang (Instansi 1)",
   "surat-pengajuan-kedua": "Form pengajuan magang (Instansi 2)",
   "bukti-spp": "Bukti pembayaran SPP",
   "surat-rekomendasi": "Surat rekomendasi",
@@ -456,7 +459,7 @@ function BerkasBaris({ berkas, terbuka, onToggle }) {
             rel="noreferrer"
             className="underline"
           >
-            Buka berkas
+            Buka Berkas
           </a>
 
           {berkas.download_url && (
@@ -534,12 +537,12 @@ function FormRiwayat({ item, memuatDetail }) {
       <Stepper step={STEPS.length} />
 
       {memuatDetail && (
-        <p className="mb-3 text-sm opacity-70">Memuat detail pengajuan...</p>
+        <p className="mb-3 text-sm opacity-70">Memuat Detail Pengajuan...</p>
       )}
 
       {item.status === "setuju" && item.nomorSurat && (
         <div className="mb-4">
-          <Field id="r-nomor" label="Nomor surat" optional>
+          <Field id="r-nomor" label="Nomor Surat" optional>
             <TextInput
               id="r-nomor"
               theme={inputTheme}
@@ -554,7 +557,7 @@ function FormRiwayat({ item, memuatDetail }) {
 
       {item.status === "revisi" && item.catatan_revisi && (
         <div className="mb-6 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800">
-          <b>Catatan revisi dari admin:</b>
+          <b>Catatan Revisi Dari Admin:</b>
           <p className="mt-1 whitespace-pre-line">{item.catatan_revisi}</p>
         </div>
       )}
@@ -788,14 +791,8 @@ export default function FormPengajuan() {
   const [disetujui, setDisetujui] = useState(false);
   const [menyetujui, setMenyetujui] = useState(false);
   const [versiPreview, setVersiPreview] = useState(0);
-  // Surat instansi mana yang sedang dipreview di langkah tanda tangan (1 atau 2)
-  const [urutanPreview, setUrutanPreview] = useState(1);
-  const [preview, setPreview] = useState({
-    src: "",
-    srcDoc: "",
-    loading: false,
-    error: "",
-  });
+  // Satu entri per surat (satu surat per instansi); semuanya tampil bersamaan
+  const [previews, setPreviews] = useState([]);
 
   // Riwayat pengajuan yang sudah dikirim
   const [riwayat, setRiwayat] = useState([]);
@@ -809,8 +806,8 @@ export default function FormPengajuan() {
 
   const tampilRiwayat = riwayat.length > 0 && !buatBaru;
 
-  // Tanpa tempat magang kedua, preview selalu surat pertama
-  const urutanAktif = form.tempat2 ? urutanPreview : 1;
+  // Banyaknya surat = banyaknya instansi (1 atau 2)
+  const jumlahSurat = form.tempat2 ? 2 : 1;
 
   // Pengajuan yang masih berjalan (menunggu / perlu revisi): tidak boleh membuat pengajuan baru
   const adaBerjalan = riwayat.some(
@@ -892,42 +889,57 @@ export default function FormPengajuan() {
     };
   }, [pilihId, tampilRiwayat]);
 
-  // Preview surat di langkah tanda tangan; dimuat ulang saat tab instansi berganti
+  // Preview semua surat di langkah tanda tangan (instansi 1 dan 2 dimuat bersamaan)
   useEffect(() => {
     if (step !== 2 || !pengajuanId.current) return;
     let batal = false;
-    let objectUrl = "";
+    const objectUrls = [];
 
-    setPreview({ src: "", srcDoc: "", loading: true, error: "" });
-    ambilPreview(pengajuanId.current, urutanAktif)
-      .then((hasil) => {
-        if (batal) {
-          if (hasil.objectUrl) URL.revokeObjectURL(hasil.objectUrl);
-          return;
-        }
-        objectUrl = hasil.objectUrl || "";
-        setPreview({
-          src: hasil.src || "",
-          srcDoc: hasil.srcDoc || "",
-          loading: false,
-          error: "",
-        });
-      })
-      .catch((err) => {
-        if (!batal)
-          setPreview({
-            src: "",
-            srcDoc: "",
+    const ubahSurat = (index, nilai) =>
+      setPreviews((prev) => prev.map((p, i) => (i === index ? nilai : p)));
+
+    setPreviews(
+      Array.from({ length: jumlahSurat }, () => ({
+        src: "",
+        srcDoc: "",
+        loading: true,
+        error: "",
+      })),
+    );
+
+    for (let urutan = 1; urutan <= jumlahSurat; urutan += 1) {
+      const index = urutan - 1;
+
+      ambilPreview(pengajuanId.current, urutan)
+        .then((hasil) => {
+          if (batal) {
+            if (hasil.objectUrl) URL.revokeObjectURL(hasil.objectUrl);
+            return;
+          }
+          if (hasil.objectUrl) objectUrls.push(hasil.objectUrl);
+          ubahSurat(index, {
+            src: hasil.src || "",
+            srcDoc: hasil.srcDoc || "",
             loading: false,
-            error: pesanDariError(err),
+            error: "",
           });
-      });
+        })
+        .catch((err) => {
+          if (!batal)
+            ubahSurat(index, {
+              src: "",
+              srcDoc: "",
+              loading: false,
+              error: pesanDariError(err),
+            });
+        });
+    }
 
     return () => {
       batal = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrls.forEach((u) => URL.revokeObjectURL(u));
     };
-  }, [step, versiPreview, urutanAktif]);
+  }, [step, versiPreview, jumlahSurat]);
 
   const update = (field) => (e) => {
     let value = e.target.files ? e.target.files[0] || null : e.target.value;
@@ -1001,7 +1013,6 @@ export default function FormPengajuan() {
   const hapusTempat2 = () => {
     setForm((f) => ({ ...f, tempat2: null }));
     setErrors(({ tempat2, ...sisa }) => sisa);
-    setUrutanPreview(1);
   };
 
   const ubahTempat2 = (field, value) => {
@@ -1025,12 +1036,12 @@ export default function FormPengajuan() {
   const validate = (s) => {
     const er = {};
     if (s === 0) {
-      if (!form.nama.trim()) er.nama = "Nama lengkap wajib diisi.";
-      if (!form.nim.trim()) er.nim = "NIM wajib diisi.";
+      if (!form.nama.trim()) er.nama = "Nama Lengkap Wajib Diisi.";
+      if (!form.nim.trim()) er.nim = "NIM Wajib Diisi.";
       else if (!/^[A-Z0-9]{11}$/.test(form.nim.trim()))
-        er.nim = "NIM harus 11 karakter (huruf dan angka).";
+        er.nim = "NIM Harus 11 Karakter (Huruf Dan Angka).";
       if (!form.departemen)
-        er.departemen = "Departemen tidak dikenali dari NIM.";
+        er.departemen = "Departemen Tidak Dikenali Dari NIM.";
 
       if (form.kelompok) {
         const errAnggota = {};
@@ -1040,13 +1051,13 @@ export default function FormPengajuan() {
           const e = {};
           const nim = a.nim.trim().toUpperCase();
 
-          if (!a.nama.trim()) e.nama = "Nama anggota wajib diisi.";
+          if (!a.nama.trim()) e.nama = "Nama Anggota Wajib Diisi.";
 
-          if (!nim) e.nim = "NIM anggota wajib diisi.";
+          if (!nim) e.nim = "NIM Anggota Wajib Diisi.";
           else if (!/^[A-Z0-9]{11}$/.test(nim))
-            e.nim = "NIM harus 11 karakter (huruf dan angka).";
+            e.nim = "NIM Harus 11 Karakter (Huruf Dan Angka).";
           else if (nimTerpakai.has(nim))
-            e.nim = "NIM ini sudah dipakai di pengajuan ini.";
+            e.nim = "NIM Ini Sudah Dipakai Di Pengajuan Ini.";
           else nimTerpakai.add(nim);
 
           if (Object.keys(e).length) errAnggota[i] = e;
@@ -1056,33 +1067,33 @@ export default function FormPengajuan() {
       }
     }
     if (s === 1) {
-      if (!form.instansi.trim()) er.instansi = "Nama instansi wajib diisi.";
+      if (!form.instansi.trim()) er.instansi = "Nama Instansi Wajib Diisi.";
       if (!form.alamat_instansi.trim())
-        er.alamat_instansi = "Alamat instansi wajib diisi.";
-      if (!form.tanggal_mulai) er.tanggal_mulai = "Tanggal mulai wajib diisi.";
+        er.alamat_instansi = "Alamat Instansi Wajib Diisi.";
+      if (!form.tanggal_mulai) er.tanggal_mulai = "Tanggal Mulai Wajib Diisi.";
       if (!form.tanggal_selesai)
-        er.tanggal_selesai = "Tanggal selesai wajib diisi.";
+        er.tanggal_selesai = "Tanggal Selesai Wajib Diisi.";
       else if (form.tanggal_mulai && form.tanggal_selesai <= form.tanggal_mulai)
         er.tanggal_selesai =
-          "Tanggal selesai tidak boleh sebelum tanggal mulai.";
+          "Tanggal Selesai Tidak Boleh Sebelum Tanggal Mulai.";
 
       if (form.tempat2) {
         const t = form.tempat2;
         const e = {};
-        if (!t.instansi.trim()) e.instansi = "Nama instansi wajib diisi.";
+        if (!t.instansi.trim()) e.instansi = "Nama Instansi Wajib Diisi.";
         if (!t.alamat_instansi.trim())
-          e.alamat_instansi = "Alamat instansi wajib diisi.";
-        if (!t.tanggal_mulai) e.tanggal_mulai = "Tanggal mulai wajib diisi.";
+          e.alamat_instansi = "Alamat Instansi Wajib Diisi.";
+        if (!t.tanggal_mulai) e.tanggal_mulai = "Tanggal Mulai Wajib Diisi.";
         if (!t.tanggal_selesai)
-          e.tanggal_selesai = "Tanggal selesai wajib diisi.";
+          e.tanggal_selesai = "Tanggal Selesai Wajib Diisi.";
         else if (t.tanggal_mulai && t.tanggal_selesai <= t.tanggal_mulai)
           e.tanggal_selesai =
-            "Tanggal selesai tidak boleh sebelum tanggal mulai.";
+            "Tanggal Selesai Tidak Boleh Sebelum Tanggal Mulai.";
         if (Object.keys(e).length) er.tempat2 = e;
       }
     }
     if (s === 2) {
-      if (!disetujui) er.ttd = "Tekan tombol Setujui terlebih dahulu.";
+      if (!disetujui) er.ttd = "Tekan Tombol Setujui Terlebih Dahulu.";
     }
     if (s === 3) {
       const errSpp = validasiBerkas(form.bukti_spp, "Bukti SPP");
@@ -1090,7 +1101,7 @@ export default function FormPengajuan() {
 
       const errRekom = validasiBerkas(
         form.surat_rekomendasi,
-        "Surat rekomendasi",
+        "Surat Rekomendasi",
       );
       if (errRekom) er.surat_rekomendasi = errRekom;
     }
@@ -1115,7 +1126,7 @@ export default function FormPengajuan() {
     const hasil = await panggilApi(ENDPOINT.buat, { json: data });
     const id = hasil?.data?.id ?? hasil?.id ?? hasil?.pengajuan?.id;
     if (!id)
-      throw new Error("ID pengajuan tidak ditemukan pada respons server.");
+      throw new Error("ID Pengajuan Tidak Ditemukan Pada Respons Server.");
 
     pengajuanId.current = id;
     snapshotDraft.current = snapshot;
@@ -1139,7 +1150,6 @@ export default function FormPengajuan() {
         return;
       }
       setLoading(false);
-      setUrutanPreview(1); // selalu mulai dari surat instansi pertama
     }
     setStep((s) => s + 1);
   };
@@ -1188,7 +1198,7 @@ export default function FormPengajuan() {
     if (!pengajuanId.current) {
       setMsg({
         type: "no",
-        text: "Data pengajuan belum tersimpan. Kembali ke langkah sebelumnya.",
+        text: "Data Pengajuan Belum Tersimpan. Kembali Ke Langkah Sebelumnya.",
       });
       return;
     }
@@ -1254,8 +1264,7 @@ export default function FormPengajuan() {
     setErrors({});
     setMsg(null);
     setDisetujui(false);
-    setUrutanPreview(1);
-    setPreview({ src: "", srcDoc: "", loading: false, error: "" });
+    setPreviews([]);
     setVersiForm((v) => v + 1);
     setSedangRevisi(null);
     setBuatBaru(true);
@@ -1283,8 +1292,7 @@ export default function FormPengajuan() {
     setErrors({});
     setMsg(null);
     setDisetujui(Boolean(item.sudah_ditandatangani));
-    setUrutanPreview(1);
-    setPreview({ src: "", srcDoc: "", loading: false, error: "" });
+    setPreviews([]);
     setVersiForm((v) => v + 1);
     setSedangRevisi({ id: item.id, catatan: item.catatan_revisi || "" });
     setBuatBaru(true);
@@ -1326,20 +1334,20 @@ export default function FormPengajuan() {
       <main className="mx-auto max-w-3xl px-4 py-8">
         <h1 className="text-center text-3xl font-bold">
           {tampilRiwayat
-            ? "Riwayat pengajuan"
+            ? "Riwayat Pengajuan"
             : sedangRevisi
-              ? "Perbaiki pengajuan"
-              : "Formulir pengajuan"}
+              ? "Perbaiki Pengajuan"
+              : "Formulir Pengajuan"}
         </h1>
         <p className="mb-8 mt-2 text-center text-[#404E3B]">
           {tampilRiwayat
-            ? "Pengajuan yang sudah kamu kirim tersimpan di sini beserta statusnya."
-            : "Pastikan semua data terisi dengan benar sebelum mengirim."}
+            ? "Pengajuan Yang Sudah Kamu Kirim Tersimpan Di Sini Beserta Statusnya."
+            : "Pastikan Semua Data Terisi Dengan Benar Sebelum Mengirim."}
         </p>
 
         {memuatRiwayat && (
           <div className="rounded-2xl bg-white p-8 text-center shadow-lg">
-            Memuat data...
+            Memuat Data...
           </div>
         )}
 
@@ -1378,11 +1386,10 @@ export default function FormPengajuan() {
             <div className="overflow-hidden rounded-2xl bg-white shadow-lg">
               <div className="bg-gradient-to-r from-[#404E3B] to-[#7B9669] px-6 py-6 text-[#E6E6E6] sm:px-8">
                 <h2 className="text-xl font-bold">
-                  Formulir pengajuan surat pengantar magang
+                  Formulir Pengajuan Surat Pengantar Magang
                 </h2>
                 <p className="mt-1 text-sm">
-                  Data di bawah adalah pengajuan yang sudah dikirim dan tidak
-                  dapat diubah.
+                  Data Di Bawah Adalah Pengajuan Yang Sudah Dikirim Dan Tidak Dapat Diubah.
                 </p>
               </div>
 
@@ -1395,11 +1402,11 @@ export default function FormPengajuan() {
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#BAC8B1] px-6 py-5 sm:px-8">
                 <p className="text-sm">
                   {aktif.status === "revisi" &&
-                    "Pengajuan ini perlu diperbaiki. Perbaikan akan memperbarui pengajuan yang sama, bukan membuat yang baru."}
+                    "Pengajuan Ini Perlu Diperbaiki. Perbaikan Akan Memperbarui Pengajuan Yang Sama, Bukan Membuat Yang Baru."}
                   {aktif.status === "menunggu_verifikasi" &&
-                    "Pengajuan sedang diverifikasi oleh admin."}
+                    "Pengajuan Sedang Diverifikasi Oleh Admin."}
                   {aktif.status === "setuju" &&
-                    "Pengajuan ini sudah disetujui."}
+                    "Pengajuan Ini Sudah Disetujui."}
                 </p>
 
                 {aktif.status === "revisi" && (
@@ -1408,7 +1415,7 @@ export default function FormPengajuan() {
                     onClick={() => perbaiki(aktif)}
                     className="border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
                   >
-                    Perbaiki pengajuan
+                    Perbaiki Pengajuan
                   </Button>
                 )}
 
@@ -1418,7 +1425,7 @@ export default function FormPengajuan() {
                     onClick={mulaiBaru}
                     className="border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
                   >
-                    Buat pengajuan baru
+                    Buat Pengajuan Baru
                   </Button>
                 )}
               </div>
@@ -1437,13 +1444,13 @@ export default function FormPengajuan() {
                 }}
                 className="mb-4 text-sm font-semibold underline hover:text-[#7B9669]"
               >
-                ← Kembali ke riwayat pengajuan
+                ← Kembali Ke Riwayat Pengajuan
               </button>
             )}
 
             {sedangRevisi?.catatan && (
               <div className="mb-4 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800">
-                <b>Catatan revisi dari admin:</b>
+                <b>Catatan Revisi Dari Admin:</b>
                 <p className="mt-1 whitespace-pre-line">
                   {sedangRevisi.catatan}
                 </p>
@@ -1456,12 +1463,12 @@ export default function FormPengajuan() {
             >
               <div className="bg-gradient-to-r from-[#404E3B] to-[#7B9669] px-6 py-6 text-[#E6E6E6] sm:px-8">   
                 <h2 className="text-xl font-bold">
-                  Formulir pengajuan surat pengantar magang
+                  Formulir Pengajuan Surat Pengantar Magang
                 </h2>
                 <p className="mt-1 text-sm">
                   {sedangRevisi
-                    ? `Perbaiki data pengajuan #${sedangRevisi.id}, lalu kirim ulang. Pengajuan yang sama akan diperbarui.`
-                    : "Lengkapi 4 langkah berikut. Surat akan diverifikasi admin sebelum diterbitkan resmi."}
+                    ? `Perbaiki Data Pengajuan #${sedangRevisi.id}, Lalu Kirim Ulang. Pengajuan Yang Sama Akan Diperbarui.`
+                    : "Lengkapi 4 Langkah Berikut. Surat Akan Diverifikasi Admin Sebelum Diterbitkan Resmi."}
                 </p>
               </div>
 
@@ -1471,7 +1478,7 @@ export default function FormPengajuan() {
                 {step === 0 && (
                   <div>
                     <div className="grid gap-x-4 sm:grid-cols-2">
-                      <Field id="nama" label="Nama lengkap" error={errors.nama}>
+                      <Field id="nama" label="Nama Lengkap" error={errors.nama}>
                         <TextInput
                           id="nama"
                           theme={inputTheme}
@@ -1503,17 +1510,17 @@ export default function FormPengajuan() {
                       <TextInput
                         id="departemen"
                         theme={inputTheme}
-                        value={form.departemen}
+                        value={capitalizeWords(form.departemen)}
                         readOnly
                         className="cursor-not-allowed"
                         color={errors.departemen ? "failure" : "gray"}
                       />
                     </Field>
 
-                    {/* Jenis pengajuan: individu / kelompok */}
+                    {/* Jenis Pengajuan: individu / kelompok */}
                     <div className="mb-4">
                       <span className="mb-1 block text-sm font-semibold text-[#404E3B]">
-                        Jenis pengajuan
+                        Jenis Pengajuan
                       </span>
                       <div className="flex rounded-lg border border-[#7B9669] p-1">
                         {[
@@ -1541,16 +1548,15 @@ export default function FormPengajuan() {
                       <div className="mb-2">
                         <div className="mb-2 flex items-center justify-between">
                           <span className="text-sm font-semibold">
-                            Anggota kelompok
+                            Anggota Kelompok
                           </span>
                           <span className="text-xs opacity-70">
-                            {form.anggota.length + 1} orang
+                            {form.anggota.length + 1} Orang
                           </span>
                         </div>
 
                         <p className="mb-3 text-xs opacity-70">
-                          Kamu terdaftar sebagai pengaju utama. Tambahkan nama
-                          dan NIM anggota lainnya.
+                          Kamu Terdaftar Sebagai Pengaju Utama. Tambahkan Nama Dan NIM Anggota Lainnya.
                         </p>
 
                         {form.anggota.map((a, i) => (
@@ -1574,7 +1580,7 @@ export default function FormPengajuan() {
                             <div className="grid gap-x-4 sm:grid-cols-2">
                               <Field
                                 id={`anggota-nama-${i}`}
-                                label="Nama lengkap"
+                                label="Nama Lengkap"
                                 error={errors.anggota?.[i]?.nama}
                               >
                                 <TextInput
@@ -1584,7 +1590,7 @@ export default function FormPengajuan() {
                                   onChange={(e) =>
                                     ubahAnggota(i, "nama", e.target.value)
                                   }
-                                  placeholder="Nama lengkap anggota"
+                                  placeholder="Nama Lengkap Anggota"
                                   color={
                                     errors.anggota?.[i]?.nama
                                       ? "failure"
@@ -1605,7 +1611,7 @@ export default function FormPengajuan() {
                                     ubahAnggota(i, "nim", e.target.value)
                                   }
                                   maxLength={11}
-                                  placeholder="NIM anggota"
+                                  placeholder="NIM Anggota"
                                   color={
                                     errors.anggota?.[i]?.nim
                                       ? "failure"
@@ -1622,7 +1628,7 @@ export default function FormPengajuan() {
                           onClick={tambahAnggota}
                           className="w-full rounded-lg border border-dashed border-[#7B9669] py-2 text-sm font-semibold text-[#404E3B] transition hover:bg-[#BAC8B1]"
                         >
-                          + Tambah anggota
+                          + Tambah Anggota
                         </button>
                       </div>
                     )}
@@ -1633,12 +1639,12 @@ export default function FormPengajuan() {
                   <div>
                     {form.tempat2 && (
                       <p className="mb-2 text-sm font-semibold">
-                        Tempat magang 1
+                        Tempat Magang 1
                       </p>
                     )}
                     <Field
                       id="instansi"
-                      label="Nama instansi / perusahaan"
+                      label="Nama Instansi / Perusahaan"
                       error={errors.instansi}
                     >
                       <TextInput
@@ -1653,7 +1659,7 @@ export default function FormPengajuan() {
                     </Field>
                     <Field
                       id="alamat_instansi"
-                      label="Alamat instansi"
+                      label="Alamat Instansi"
                       error={errors.alamat_instansi}
                     >
                       <Textarea
@@ -1663,14 +1669,14 @@ export default function FormPengajuan() {
                         value={form.alamat_instansi}
                         onChange={update("alamat_instansi")}
                         onBlur={rapikan("alamat_instansi")}
-                        placeholder="Alamat lengkap instansi"
+                        placeholder="Alamat Lengkap Instansi"
                         color={errors.alamat_instansi ? "failure" : "gray"}
                       />
                     </Field>
                     <div className="grid gap-x-4 sm:grid-cols-2">
                       <Field
                         id="tanggal_mulai"
-                        label="Tanggal mulai"
+                        label="Tanggal Mulai"
                         error={errors.tanggal_mulai}
                       >
                         <TextInput
@@ -1684,7 +1690,7 @@ export default function FormPengajuan() {
                       </Field>
                       <Field
                         id="tanggal_selesai"
-                        label="Tanggal selesai"
+                        label="Tanggal Selesai"
                         error={errors.tanggal_selesai}
                       >
                         <TextInput
@@ -1714,13 +1720,13 @@ export default function FormPengajuan() {
                             <span className="min-w-0 flex-1">
                               <b className="block truncate text-sm">
                                 {form.tempat2.instansi.trim() ||
-                                  "Tempat magang 2"}
+                                  "Tempat Magang 2"}
                               </b>
                               <span className="text-xs opacity-70">
                                 {form.tempat2.tanggal_mulai ||
                                 form.tempat2.tanggal_selesai
                                   ? `${formatTanggal(form.tempat2.tanggal_mulai)} – ${formatTanggal(form.tempat2.tanggal_selesai)}`
-                                  : "Belum diisi"}
+                                  : "Belum Diisi"}
                               </span>
                             </span>
                             <span aria-hidden="true" className="text-xs">
@@ -1740,7 +1746,7 @@ export default function FormPengajuan() {
                           <div className="border-t border-[#BAC8B1] p-4">
                             <Field
                               id="t2-instansi"
-                              label="Nama instansi / perusahaan"
+                              label="Nama Instansi / Perusahaan"
                               error={errors.tempat2?.instansi}
                             >
                               <TextInput
@@ -1759,7 +1765,7 @@ export default function FormPengajuan() {
                             </Field>
                             <Field
                               id="t2-alamat"
-                              label="Alamat instansi"
+                              label="Alamat Instansi"
                               error={errors.tempat2?.alamat_instansi}
                             >
                               <Textarea
@@ -1774,7 +1780,7 @@ export default function FormPengajuan() {
                                   )
                                 }
                                 onBlur={rapikanTempat2("alamat_instansi")}
-                                placeholder="Alamat lengkap instansi"
+                                placeholder="Alamat Lengkap Instansi"
                                 color={
                                   errors.tempat2?.alamat_instansi
                                     ? "failure"
@@ -1785,7 +1791,7 @@ export default function FormPengajuan() {
                             <div className="grid gap-x-4 sm:grid-cols-2">
                               <Field
                                 id="t2-mulai"
-                                label="Tanggal mulai"
+                                label="Tanggal Mulai"
                                 error={errors.tempat2?.tanggal_mulai}
                               >
                                 <TextInput
@@ -1805,7 +1811,7 @@ export default function FormPengajuan() {
                               </Field>
                               <Field
                                 id="t2-selesai"
-                                label="Tanggal selesai"
+                                label="Tanggal Selesai"
                                 error={errors.tempat2?.tanggal_selesai}
                               >
                                 <TextInput
@@ -1836,12 +1842,12 @@ export default function FormPengajuan() {
                         onClick={tambahTempat2}
                         className="w-full rounded-lg border border-dashed border-[#7B9669] py-2 text-sm font-semibold text-[#404E3B] transition hover:bg-[#BAC8B1]"
                       >
-                        + Tambah tempat magang
+                        + Tambah Tempat Magang
                       </button>
                     )}
                     {form.tempat2 && (
                       <p className="text-center text-xs opacity-70">
-                        Maksimal 2 tempat magang.
+                        Maksimal 2 Tempat Magang.
                       </p>
                     )}
                   </div>
@@ -1849,106 +1855,94 @@ export default function FormPengajuan() {
 
                 {step === 2 && (
                   <div>
-                    {/* Tab untuk berpindah antara surat instansi 1 dan 2 */}
-                    {form.tempat2 && (
-                      <div className="mb-3">
-                        <div
-                          role="tablist"
-                          aria-label="Pilih surat yang dipreview"
-                          className="flex rounded-lg border border-[#7B9669] p-1"
-                        >
-                          {[
-                            { urutan: 1, nama: form.instansi },
-                            { urutan: 2, nama: form.tempat2.instansi },
-                          ].map((tab) => (
-                            <button
-                              key={tab.urutan}
-                              type="button"
-                              role="tab"
-                              aria-selected={urutanAktif === tab.urutan}
-                              onClick={() => setUrutanPreview(tab.urutan)}
-                              className={`min-w-0 flex-1 rounded-md px-3 py-2 text-center text-sm font-semibold transition ${
-                                urutanAktif === tab.urutan
-                                  ? "bg-[#404E3B] text-[#E6E6E6]"
-                                  : "text-[#404E3B] hover:bg-[#BAC8B1]"
-                              }`}
-                            >
-                              <span className="block">
-                                Surat instansi {tab.urutan}
-                              </span>
-                              <span className="block truncate text-xs font-normal opacity-80">
-                                {tab.nama.trim() || "-"}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                        <p className="mt-2 text-xs opacity-70">
-                          Pengajuanmu memiliki 2 surat. Periksa keduanya
-                          sebelum menyetujui; satu persetujuan berlaku untuk
-                          kedua surat.
-                        </p>
-                      </div>
+                    {jumlahSurat > 1 && (
+                      <p className="mb-4 text-sm opacity-80">
+                        Pengajuanmu Memiliki {jumlahSurat} Surat, Satu Untuk Tiap Instansi. Periksa Semuanya Sebelum Menyetujui; Satu Persetujuan Berlaku Untuk Semua Surat.
+                      </p>
                     )}
 
-                    <div className="mb-4 overflow-hidden rounded-lg border border-[#BAC8B1] bg-white">
-                      {preview.loading && (
-                        <p className="p-6 text-sm">Memuat preview surat...</p>
-                      )}
-                      {preview.error && (
-                        <div className="p-6">
-                          <p className="text-sm font-medium text-[#b42318]">
-                            {preview.error}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => setVersiPreview((v) => v + 1)}
-                            className="mt-2 text-sm font-semibold underline hover:text-[#7B9669]"
-                          >
-                            Muat ulang preview
-                          </button>
+                    {/* Semua surat langsung tampil berurutan (tanpa tab) */}
+                    {previews.map((p, i) => {
+                      const namaInstansi =
+                        i === 0 ? form.instansi : form.tempat2?.instansi;
+
+                      return (
+                        <div key={i} className="mb-6">
+                          {jumlahSurat > 1 && (
+                            <p className="mb-2 text-sm font-semibold">
+                              Surat {i + 1} Dari {jumlahSurat}
+                              {namaInstansi?.trim()
+                                ? ` · ${namaInstansi.trim()}`
+                                : ""}
+                            </p>
+                          )}
+
+                          <div className="overflow-hidden rounded-lg border border-[#BAC8B1] bg-white">
+                            {p.loading && (
+                              <p className="p-6 text-sm">
+                                Memuat Preview Surat...
+                              </p>
+                            )}
+                            {p.error && (
+                              <div className="p-6">
+                                <p className="text-sm font-medium text-[#b42318]">
+                                  {p.error}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => setVersiPreview((v) => v + 1)}
+                                  className="mt-2 text-sm font-semibold underline hover:text-[#7B9669]"
+                                >
+                                  Muat Ulang Preview
+                                </button>
+                              </div>
+                            )}
+                            {!p.loading &&
+                              !p.error &&
+                              (p.src || p.srcDoc) && (
+                                <iframe
+                                  title={`Preview Surat ${i + 1}`}
+                                  src={
+                                    p.src
+                                      ? `${p.src}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`
+                                      : undefined
+                                  }
+                                  srcDoc={p.srcDoc || undefined}
+                                  className="w-full rounded-lg border border-[#BAC8B1] bg-white"
+                                  style={{ minHeight: 600 }}
+                                  onLoad={(e) => {
+                                    const doc = e.target.contentDocument;
+                                    if (doc && p.srcDoc) {
+                                      e.target.style.height =
+                                        doc.documentElement.scrollHeight + "px";
+                                    }
+                                  }}
+                                />
+                              )}
+                          </div>
                         </div>
-                      )}
-                      {!preview.loading &&
-                        !preview.error &&
-                        (preview.src || preview.srcDoc) && (
-                          <iframe
-                            title={`Preview surat instansi ${urutanAktif}`}
-                            src={
-                              preview.src
-                                ? `${preview.src}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`
-                                : undefined
-                            }
-                            srcDoc={preview.srcDoc || undefined}
-                            className="w-full rounded-lg border border-[#BAC8B1] bg-white"
-                            style={{ minHeight: 600 }}
-                            onLoad={(e) => {
-                              const doc = e.target.contentDocument;
-                              if (doc && preview.srcDoc) {
-                                e.target.style.height =
-                                  doc.documentElement.scrollHeight + "px";
-                              }
-                            }}
-                          />
-                        )}
-                    </div>
+                      );
+                    })}
 
                     <Field id="ttd" label="Persetujuan" error={errors.ttd}>
                       <p className="mb-3 text-sm">
-                        Periksa isi surat di atas. Tekan Setujui untuk
-                        menandatangani surat dengan QR code.
+                        Periksa Isi {jumlahSurat > 1 ? "Kedua Surat" : "Surat"}{" "}
+                        Di Atas. Tekan Setujui Untuk Menandatangani{" "}
+                        {jumlahSurat > 1 ? "Semua Surat" : "Surat"} Dengan QR
+                        Code.
                       </p>
                       <div className="flex flex-wrap items-center gap-2">
                         {disetujui ? (
                           <>
                             <span className="w-fit rounded-lg bg-[#BAC8B1] px-3 py-2 text-sm font-semibold">
-                              ✓ Surat sudah disetujui
+                              ✓ Surat Sudah Disetujui
                             </span>
                             <Button
                               type="button"
                               onClick={batalSetujui}
                               className="w-fit border border-[#404E3B] bg-transparent font-bold text-[#404E3B] hover:bg-[#404E3B] hover:text-[#E6E6E6]"
                             >
-                              Batal setujui
+                              Batal Setujui
                             </Button>
                           </>
                         ) : (
@@ -1956,7 +1950,9 @@ export default function FormPengajuan() {
                             type="button"
                             onClick={setujui}
                             disabled={
-                              menyetujui || preview.loading || !!preview.error
+                              menyetujui ||
+                              previews.length === 0 ||
+                              previews.some((p) => p.loading || p.error)
                             }
                             className="w-fit border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
                           >
@@ -1971,7 +1967,7 @@ export default function FormPengajuan() {
                   <div>
                     <Field
                       id="bukti_spp"
-                      label="1. Upload File Detail SPP (PDF / JPG / PNG, maks. 2 MB)"
+                      label="1. Upload File Detail SPP (PDF / JPG / PNG, Maks. 2 MB)"
                       error={errors.bukti_spp}
                     >
                       <FileInput
@@ -1984,7 +1980,7 @@ export default function FormPengajuan() {
 
                     <Field
                       id="surat_rekomendasi"
-                      label="2. Upload Surat Rekomendasi Magang (PDF / JPG / PNG, maks. 2 MB)"
+                      label="2. Upload Surat Rekomendasi Magang (PDF / JPG / PNG, Maks. 2 MB)"
                       error={errors.surat_rekomendasi}
                     >
                       <FileInput
@@ -2024,7 +2020,7 @@ export default function FormPengajuan() {
                       aria-disabled={belumSetuju}
                       title={
                         belumSetuju
-                          ? "Setujui surat terlebih dahulu"
+                          ? "Setujui Surat Terlebih Dahulu"
                           : undefined
                       }
                       className={`border-0 font-bold ${
@@ -2042,7 +2038,7 @@ export default function FormPengajuan() {
                       disabled={loading}
                       className="border-0 bg-[#404E3B] font-bold text-[#E6E6E6] hover:bg-[#BAC8B1] hover:text-[#404E3B]"
                     >
-                      {loading ? "Mengirim..." : "Kirim pengajuan"}
+                      {loading ? "Mengirim..." : "Kirim Pengajuan"}
                     </Button>
                   )}
                 </div>

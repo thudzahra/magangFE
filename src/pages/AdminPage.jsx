@@ -14,7 +14,7 @@ export const ENDPOINT = {
   // Metode edit (PATCH/PUT) diatur lewat METHOD_EDIT di DetailPage.jsx.
   edit: (id) => `/admin/pengajuan-magang/${id}`,
   status: (id) => `/admin/pengajuan-magang/${id}/status`,
-  // BARU: buat pesan + link unduh sementara untuk dikirim lewat WhatsApp (urutan 1 atau 2)
+  // Buat pesan + link unduh sementara untuk dikirim lewat WhatsApp (urutan 1 atau 2)
   whatsapp: (id, urutan) =>
     `/admin/pengajuan-magang/${id}/surat-magang/${urutan}/whatsapp`,
 };
@@ -25,11 +25,18 @@ const PER_PAGE = 20;
 export const PATH_DAFTAR = "/dashboard-admin";
 const PATH_DETAIL = (id) => `/dashboard-admin/pengajuan/${id}`;
 
+// Huruf pertama setiap kata dibuat kapital ("kaya gini" -> "Kaya Gini").
+// Dipakai untuk teks yang ditampilkan, termasuk pesan dari server.
+export const kapitalKata = (value) =>
+  String(value ?? "").replace(/(^|\s)(\S)/g, (_, spasi, huruf) =>
+    spasi + huruf.toUpperCase()
+  );
+
 export async function panggilApi(endpoint, { method = "GET", body } = {}) {
   const token = localStorage.getItem("token");
 
   if (!token) {
-    throw new Error("Token login tidak ditemukan. Silakan login kembali.");
+    throw new Error("Token Login Tidak Ditemukan. Silakan Login Kembali.");
   }
 
   let response;
@@ -46,7 +53,7 @@ export async function panggilApi(endpoint, { method = "GET", body } = {}) {
     });
   } catch {
     throw new Error(
-      "Tidak dapat terhubung ke server. Periksa koneksi dan alamat API."
+      "Tidak Dapat Terhubung Ke Server. Periksa Koneksi Dan Alamat API."
     );
   }
 
@@ -58,18 +65,19 @@ export async function panggilApi(endpoint, { method = "GET", body } = {}) {
       : "";
 
     if (response.status === 401) {
-      throw new Error("Sesi login tidak valid. Silakan login kembali.");
+      throw new Error("Sesi Login Tidak Valid. Silakan Login Kembali.");
     }
 
     if (response.status === 403) {
       throw new Error(
-        data.message ||
-          "Akses ditolak. Pastikan akun memiliki role admin_kpap."
+        kapitalKata(data.message) ||
+          "Akses Ditolak. Pastikan Akun Memiliki Role admin_kpap."
       );
     }
 
     throw new Error(
-      validationErrors || data.message || `Request gagal (${response.status}).`
+      kapitalKata(validationErrors || data.message) ||
+        `Request Gagal (${response.status}).`
     );
   }
 
@@ -128,7 +136,7 @@ function daftarHalaman(sekarang, terakhir) {
 export const NAMA_DEPARTEMEN = {
   MNH: "Manajemen Hutan",
   HH: "Hasil Hutan",
-  KSHE: "Konservasi Sumber Daya Hutan dan Ekowisata",
+  KSHE: "Konservasi SumberDaya Hutan dan Ekowisata",
   SVK: "Silvikultur",
 };
 
@@ -158,8 +166,6 @@ export const LABEL_BERKAS = {
   "surat-magang-kedua": "Surat pengantar magang (Instansi 2)",
 };
 
-// Urutan tampil berkas di halaman detail. Surat pengajuan 1 dan 2 berdekatan.
-// "surat-pengajuan-kedua" hanya tampil bila pengajuannya punya instansi kedua.
 export const URUTAN_BERKAS = [
   "surat-pengajuan",
   "surat-pengajuan-kedua",
@@ -275,13 +281,13 @@ function teks(value, fallback = "-") {
   if (value == null || value === "") return fallback;
 
   if (typeof value === "object") {
-    if (value.label != null) return String(value.label);
-    if (value.value != null) return String(value.value);
+    if (value.label != null) return kapitalKata(value.label);
+    if (value.value != null) return kapitalKata(value.value);
 
     return fallback;
   }
 
-  return String(value);
+  return kapitalKata(value);
 }
 
 export function normalisasiStatus(status) {
@@ -329,7 +335,7 @@ function urutkanPengajuan(a, b) {
 
 const STATUS = {
   menunggu: {
-    label: "Menunggu verifikasi",
+    label: "Menunggu Verifikasi",
     className: "bg-[#FDEFC3] text-[#8A5A00]",
   },
   terverifikasi: {
@@ -337,7 +343,7 @@ const STATUS = {
     className: "bg-[#D9F2D9] text-[#1F6B2E]",
   },
   ditolak: {
-    label: "Perlu revisi",
+    label: "Perlu Revisi",
     className: "bg-red-100 text-red-800",
   },
 };
@@ -458,12 +464,12 @@ export function BerkasKosong({ label }) {
   return (
     <div className="rounded-xl border border-dashed border-[#BAC8B1] bg-white p-4 text-sm">
       <b>{label}</b>
-      <p className="mt-2 text-gray-500">Berkas belum tersedia.</p>
+      <p className="mt-2 text-gray-500">Berkas Belum Tersedia.</p>
     </div>
   );
 }
 
-// Preview berkas tertutup secara default; admin klik "Lihat preview" untuk membukanya.
+// Preview berkas tertutup secara default; admin klik "Preview Surat" untuk membukanya.
 // Prop `bukaAwal` (opsional) membuat preview langsung terbuka.
 export function FilePreview({ berkas, bukaAwal = false }) {
   const [terbuka, setTerbuka] = useState(bukaAwal);
@@ -497,7 +503,7 @@ export function FilePreview({ berkas, bukaAwal = false }) {
             rel="noreferrer"
             className="underline-offset-2 hover:underline"
           >
-            Buka berkas
+            Buka Berkas
           </a>
 
           {berkas.download_url && (
@@ -539,18 +545,18 @@ export function FilePreview({ berkas, bukaAwal = false }) {
 // =====================================================
 
 const TAB = [
-  { value: "menunggu_verifikasi", label: "Menunggu verifikasi" },
+  { value: "menunggu_verifikasi", label: "Menunggu Verifikasi" },
   { value: "setuju", label: "Disetujui" },
   { value: "revisi", label: "Direvisi" },
-  { value: "", label: "Seluruh data" },
+  { value: "", label: "Seluruh Data" },
 ];
 
 const KOLOM = [
   "No.",
-  "No. surat",
+  "No. Surat",
   "Nama / NIM",
   "Departemen",
-  "Perusahaan tujuan",
+  "Perusahaan Tujuan",
   "Pelaksanaan",
   "Status",
   "Aksi",
@@ -767,29 +773,29 @@ export default function AdminPage() {
       <main className="mx-auto w-full max-w-[1680px] flex-1 px-4 py-10 sm:px-6 lg:px-8">
         <div className="mb-8 flex flex-col items-center text-center">
           <h1 className="text-2xl font-bold sm:text-3xl">
-            Dashboard verifikasi admin
+            Dashboard Verifikasi Admin
           </h1>
           <p className="mx-auto mt-2 max-w-2xl text-sm text-[#5b6b55] sm:text-base">
-            Periksa data dan berkas mahasiswa, lalu terbitkan surat pengantar magang.
+            Periksa Data Dan Berkas Mahasiswa, Lalu Terbitkan Surat Pengantar Magang.
           </p>
         </div>
 
         <section className="overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-black/5">
           {/* Ringkasan + judul */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E6E6E6] px-5 py-5 sm:px-8">
-            <h2 className="text-xl font-bold sm:text-2xl">Daftar pengajuan</h2>
+            <h2 className="text-xl font-bold sm:text-2xl">Daftar Pengajuan</h2>
 
             <div className="flex flex-wrap gap-2 text-sm font-medium">
               <span className="rounded-full bg-[#FDEFC3] px-4 py-1.5 text-[#8A5A00]">
-                {jumlah.menunggu_verifikasi} menunggu
+                {jumlah.menunggu_verifikasi} Menunggu
               </span>
 
               <span className="rounded-full bg-[#D9F2D9] px-4 py-1.5 text-[#1F6B2E]">
-                {jumlah.setuju} terverifikasi
+                {jumlah.setuju} Terverifikasi
               </span>
 
               <span className="rounded-full bg-[#FDE2E2] px-4 py-1.5 text-[#B42318]">
-                {jumlah.revisi} revisi
+                {jumlah.revisi} Revisi
               </span>
             </div>
           </div>
@@ -834,7 +840,7 @@ export default function AdminPage() {
           {/* Filter */}
           <div className="flex flex-wrap items-center gap-3 px-5 py-5 sm:px-8">
             <label className="relative min-w-[240px] flex-1">
-              <span className="sr-only">Cari pengajuan</span>
+              <span className="sr-only">Cari Pengajuan</span>
 
               <IconCari className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 opacity-70" />
 
@@ -842,7 +848,7 @@ export default function AdminPage() {
                 type="search"
                 value={cari}
                 onChange={(e) => setCari(e.target.value)}
-                placeholder="Cari nama, NIM, perusahaan, no. surat..."
+                placeholder="Cari Nama, NIM, Perusahaan, No. Surat..."
                 className="w-full rounded-xl border border-[#404E3B] bg-white py-3 pl-12 pr-4 text-sm outline-none focus:ring-2 focus:ring-[#BAC8B1] sm:text-base"
               />
             </label>
@@ -851,14 +857,14 @@ export default function AdminPage() {
               <select
                 value={filterDep}
                 onChange={(e) => pilihDepartemen(e.target.value)}
-                aria-label="Filter departemen"
+                aria-label="Filter Departemen"
                 className="w-full cursor-pointer appearance-none rounded-xl border border-[#404E3B] bg-white py-3 pl-4 pr-10 text-sm outline-none focus:ring-2 focus:ring-[#BAC8B1] sm:text-base"
               >
-                <option value="">Semua departemen</option>
+                <option value="">Semua Departemen</option>
 
                 {pilihanDep.map((dep) => (
                   <option key={dep.kode} value={dep.kode}>
-                    {dep.nama}
+                    {kapitalKata(dep.nama)}
                   </option>
                 ))}
               </select>
@@ -881,7 +887,7 @@ export default function AdminPage() {
                   {KOLOM.map((heading) => (
                     <th
                       key={heading}
-                      className={`px-5 py-3.5 text-xs font-semibold uppercase tracking-wide first:pl-8 last:pr-8 ${
+                      className={`px-5 py-3.5 text-xs font-semibold tracking-wide first:pl-8 last:pr-8 ${
                         heading === "No." ? "text-center" : ""
                       }`}
                     >
@@ -898,7 +904,7 @@ export default function AdminPage() {
                       colSpan={KOLOM.length}
                       className="px-6 py-14 text-center text-base"
                     >
-                      Memuat data pengajuan...
+                      Memuat Data Pengajuan...
                     </td>
                   </tr>
                 )}
@@ -913,7 +919,7 @@ export default function AdminPage() {
 
                       <div className="mt-3">
                         <Button onClick={() => setVersi((v) => v + 1)}>
-                          Coba lagi
+                          Coba Lagi
                         </Button>
                       </div>
                     </td>
@@ -926,7 +932,7 @@ export default function AdminPage() {
                       colSpan={KOLOM.length}
                       className="px-6 py-14 text-center text-base"
                     >
-                      Tidak ada pengajuan yang cocok.
+                      Tidak Ada Pengajuan Yang Cocok.
                     </td>
                   </tr>
                 )}
@@ -958,14 +964,16 @@ export default function AdminPage() {
                           </div>
                         </td>
 
-                        <td className="px-5 py-4">{item.departemen || "-"}</td>
+                        <td className="px-5 py-4">
+                          {kapitalKata(item.departemen) || "-"}
+                        </td>
 
                         <td className="px-5 py-4">{item.instansi || "-"}</td>
 
                         <td className="px-5 py-4 text-xs leading-relaxed">
                           {formatTanggal(item.tanggal_mulai)}
                           <br />
-                          s.d. {formatTanggal(item.tanggal_selesai)}
+                          S.d. {formatTanggal(item.tanggal_selesai)}
                         </td>
 
                         <td className="px-5 py-4">
@@ -991,8 +999,8 @@ export default function AdminPage() {
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#E6E6E6] px-5 py-4 text-sm sm:px-8">
             <span className="text-[#7a8575]">
               {meta.total > 0
-                ? `Menampilkan ${meta.from ?? 0}–${meta.to ?? 0} dari ${meta.total} pengajuan`
-                : "Tidak ada data"}
+                ? `Menampilkan ${meta.from ?? 0}–${meta.to ?? 0} Dari ${meta.total} Pengajuan`
+                : "Tidak Ada Data"}
             </span>
 
             {meta.last_page > 1 && (
@@ -1045,7 +1053,7 @@ export default function AdminPage() {
         <div className="mx-auto w-full max-w-[1680px]">
           <b>SIMAGANG</b> — Sistem Informasi Magang Kampus
           <br />
-          Fakultas Kehutanan dan Lingkungan IPB
+          Fakultas Kehutanan Dan Lingkungan IPB
         </div>
       </footer>
     </div>
