@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 const API = (
   import.meta.env.VITE_API_URL ||
-  "http://192.168.0.104:8000/api"
+  "http://10.6.98.229:8000/api"
 ).replace(/\/+$/, "");
 
 export const ENDPOINT = {
@@ -127,7 +127,7 @@ function daftarHalaman(sekarang, terakhir) {
 
 export const NAMA_DEPARTEMEN = {
   MNH: "Manajemen Hutan",
-  THH: "Teknologi Hasil Hutan",
+  HH: "Hasil Hutan",
   KSHE: "Konservasi Sumber Daya Hutan dan Ekowisata",
   SVK: "Silvikultur",
 };
@@ -150,11 +150,11 @@ function bentukDepartemen(dep) {
 }
 
 export const LABEL_BERKAS = {
-  "surat-pengajuan": "Surat pengajuan magang",
-  "surat-pengajuan-kedua": "Surat pengajuan magang (Instansi 2)",
+  "surat-pengajuan": "Form pengajuan magang (Instansi 1)",
+  "surat-pengajuan-kedua": "Form pengajuan magang (Instansi 2)",
   "bukti-spp": "Bukti pembayaran SPP",
   "surat-rekomendasi": "Surat rekomendasi",
-  "surat-magang": "Surat pengantar magang",
+  "surat-magang": "Surat pengantar magang (Instansi 1)",
   "surat-magang-kedua": "Surat pengantar magang (Instansi 2)",
 };
 

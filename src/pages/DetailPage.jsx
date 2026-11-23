@@ -34,10 +34,17 @@ const KEY_KIRIM_ANGGOTA = "anggota";
 
 const DEPARTEMEN_DARI_NIM = {
   E141: "MNH",
-  E241: "THH",
+  E241: "HH",
   E341: "KSHE",
   E441: "SVK",
 };
+
+// BARU: daftar tab di kartu isi pengajuan
+const TAB = [
+  { id: "data", label: "Data diri" },
+  { id: "tempat", label: "Tempat magang" },
+  { id: "berkas", label: "Berkas" },
+];
 
 // Daftar mahasiswa dari API (`daftar_mahasiswa`, urutan pertama biasanya ketua).
 // Yang ditampilkan sebagai anggota adalah semua entri selain ketua (NIM sama).
@@ -134,25 +141,10 @@ function nomorWa(hp) {
 const INPUT =
   "w-full rounded-lg border border-[#BAC8B1] bg-white px-3 py-2.5 text-sm font-semibold text-[#404E3B] outline-none focus:border-[#404E3B] focus:ring-2 focus:ring-[#BAC8B1] disabled:opacity-60";
 
-// Gaya tombol WhatsApp (dipakai tombol kontak biasa dan tombol kirim surat)
+// DIUBAH: gaya tombol WhatsApp untuk kartu status berlatar hijau (garis & teks putih).
+// Dipakai tombol kontak biasa dan tombol kirim surat.
 const TOMBOL_WA =
-  "inline-flex rounded-lg border border-[#404E3B] px-4 py-2 text-sm font-bold text-[#404E3B] transition hover:bg-[#404E3B] hover:text-[#E6E6E6] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B9669] disabled:cursor-not-allowed disabled:opacity-60";
-
-// Kartu pengelompok form: judul + isi
-function Section({ judul, keterangan, children }) {
-  return (
-    <section className="rounded-2xl border border-[#BAC8B1] bg-white">
-      <div className="border-b border-[#E6E6E6] px-5 py-3.5 sm:px-6">
-        <h2 className="font-bold">{judul}</h2>
-        {keterangan && (
-          <p className="mt-0.5 text-xs text-[#5b6b55]">{keterangan}</p>
-        )}
-      </div>
-
-      <div className="space-y-6 p-5 sm:p-6">{children}</div>
-    </section>
-  );
-}
+  "inline-flex rounded-lg border border-white px-4 py-2 text-sm font-bold text-white transition hover:bg-white hover:text-[#3b4a37] focus:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-not-allowed disabled:opacity-60";
 
 // Satu kolom: label di atas, lalu input (mode edit) atau teks (mode lihat)
 function Kolom({ label, edit, value, children, className = "" }) {
@@ -211,10 +203,13 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
   const [error, setError] = useState("");
   const [sukses, setSukses] = useState("");
 
-  // BARU: urutan surat (1/2) yang sedang dibuatkan link WhatsApp-nya, null bila tidak ada
+  // Urutan surat (1/2) yang sedang dibuatkan link WhatsApp-nya, null bila tidak ada
   const [waBusy, setWaBusy] = useState(null);
 
   const [form, setForm] = useState(() => formAwal(item));
+
+  // BARU: tab yang sedang terbuka: "data" | "tempat" | "berkas"
+  const [tab, setTab] = useState("data");
 
   // Popup yang sedang terbuka: "verifikasi" | "revisi" | "keluar" | null
   const [dialog, setDialog] = useState(null);
@@ -302,6 +297,12 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
     ).values(),
   ].sort((a, b) => a.nama.localeCompare(b.nama, "id"));
 
+  // Tampilkan pesan error validasi sekaligus pindah ke tab yang bermasalah.
+  function galat(pesan, tabTujuan) {
+    setTab(tabTujuan);
+    setError(pesan);
+  }
+
   async function simpanEdit() {
     setError("");
     setSukses("");
@@ -312,22 +313,7 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
     const alamat = form.alamat_instansi.trim();
 
     if (!nama || !nim || !form.departemen) {
-      setError("Nama, NIM, dan departemen wajib diisi.");
-      return;
-    }
-
-    if (!instansi || !alamat) {
-      setError("Perusahaan tujuan dan alamat wajib diisi.");
-      return;
-    }
-
-    if (!form.tanggal_mulai || !form.tanggal_selesai) {
-      setError("Tanggal mulai dan tanggal selesai wajib diisi.");
-      return;
-    }
-
-    if (form.tanggal_selesai < form.tanggal_mulai) {
-      setError("Tanggal selesai tidak boleh sebelum tanggal mulai.");
+      galat("Nama, NIM, dan departemen wajib diisi.", "data");
       return;
     }
 
@@ -335,23 +321,41 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
       adaKelompok &&
       form.anggota.some((a) => !String(a.nama).trim() || !String(a.nim).trim())
     ) {
-      setError("Nama dan NIM setiap anggota kelompok wajib diisi.");
+      galat("Nama dan NIM setiap anggota kelompok wajib diisi.", "data");
+      return;
+    }
+
+    if (!instansi || !alamat) {
+      galat("Perusahaan tujuan dan alamat wajib diisi.", "tempat");
+      return;
+    }
+
+    if (!form.tanggal_mulai || !form.tanggal_selesai) {
+      galat("Tanggal mulai dan tanggal selesai wajib diisi.", "tempat");
+      return;
+    }
+
+    if (form.tanggal_selesai < form.tanggal_mulai) {
+      galat("Tanggal selesai tidak boleh sebelum tanggal mulai.", "tempat");
       return;
     }
 
     if (item.tempat2) {
       if (!form.instansi2.trim() || !form.alamat_instansi2.trim()) {
-        setError("Perusahaan tujuan 2 dan alamatnya wajib diisi.");
+        galat("Perusahaan tujuan 2 dan alamatnya wajib diisi.", "tempat");
         return;
       }
 
       if (!form.tanggal_mulai2 || !form.tanggal_selesai2) {
-        setError("Tanggal mulai dan selesai perusahaan 2 wajib diisi.");
+        galat("Tanggal mulai dan selesai perusahaan 2 wajib diisi.", "tempat");
         return;
       }
 
       if (form.tanggal_selesai2 < form.tanggal_mulai2) {
-        setError("Tanggal selesai perusahaan 2 tidak boleh sebelum tanggal mulainya.");
+        galat(
+          "Tanggal selesai perusahaan 2 tidak boleh sebelum tanggal mulainya.",
+          "tempat"
+        );
         return;
       }
     }
@@ -438,7 +442,7 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
     }
   }
 
-  // BARU: minta backend membuat pesan + link unduh sementara, lalu buka WhatsApp.
+  // Minta backend membuat pesan + link unduh sementara, lalu buka WhatsApp.
   // Pesan TIDAK terkirim otomatis: admin menekan kirim sendiri di WhatsApp.
   // urutan: 1 = surat instansi pertama, 2 = surat instansi kedua.
   async function kirimSuratWa(urutan) {
@@ -446,7 +450,7 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
     setSukses("");
 
     // Buka tab SEKARANG (masih di dalam klik) supaya tidak diblokir popup blocker.
-    const tab = window.open("", "_blank");
+    const tabBaru = window.open("", "_blank");
 
     setWaBusy(urutan);
 
@@ -463,8 +467,8 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
         throw new Error("Respons server tidak berisi link WhatsApp.");
       }
 
-      if (tab) {
-        tab.location.href = url;
+      if (tabBaru) {
+        tabBaru.location.href = url;
       } else {
         window.open(url, "_blank");
       }
@@ -473,7 +477,7 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
         "WhatsApp dibuka dengan pesan yang sudah terisi. Tekan kirim di WhatsApp untuk mengirimnya."
       );
     } catch (err) {
-      tab?.close();
+      tabBaru?.close();
       setError(err.message || "Gagal membuat link WhatsApp.");
     } finally {
       setWaBusy(null);
@@ -592,25 +596,25 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
 
       {/* ISI */}
       <main className="mx-auto w-full max-w-5xl flex-1 space-y-5 px-4 py-6 sm:px-6">
-        {/* Status & kontak */}
-        <div className="space-y-3 rounded-xl border border-[#BAC8B1] bg-white px-5 py-4 text-sm">
+        {/* Status & kontak (DIUBAH: latar gradien hijau, teks putih) */}
+        <div className="space-y-3 rounded-2xl bg-gradient-to-r from-[#3b4a37] via-[#4d6244] to-[#7b9a69] px-5 py-4 text-sm text-white">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <span className="flex items-center gap-2">
-              <span className="opacity-70">Status</span>
+              <span className="text-white/75">Status</span>
               <StatusBadge status={item.status} />
             </span>
 
             {nomorSurat && (
               <span className="flex items-center gap-2">
-                <span className="opacity-70">Nomor surat</span>
+                <span className="text-white/75">Nomor surat</span>
                 <b className="tabular-nums">{nomorSurat}</b>
               </span>
             )}
           </div>
 
-          <div className="space-y-2 border-t border-[#E6E6E6] pt-3">
+          <div className="space-y-2 border-t border-white/25 pt-3">
             <div className="flex gap-2">
-              <span className="w-28 shrink-0 opacity-70">Email</span>
+              <span className="w-28 shrink-0 text-white/75">Email</span>
               <span>:</span>
 
               {email ? (
@@ -626,7 +630,7 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
             </div>
 
             <div className="flex gap-2">
-              <span className="w-28 shrink-0 opacity-70">No. telepon</span>
+              <span className="w-28 shrink-0 text-white/75">No. telepon</span>
               <span>:</span>
               <span className="tabular-nums">{hp || "-"}</span>
             </div>
@@ -643,7 +647,7 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
               </a>
             )}
 
-            {/* BARU: setelah diverifikasi, kirim surat via WhatsApp (pesan dibuat backend) */}
+            {/* Setelah diverifikasi: kirim surat via WhatsApp (pesan dibuat backend) */}
             {verified && (suratMagang || suratMagang2) && (
               <div className="mt-1 flex flex-wrap gap-2">
                 {suratMagang && (
@@ -695,163 +699,207 @@ function DetailContent({ item, onClose, onUpdated, opsiDepartemen = [] }) {
           </div>
         )}
 
-        {/* 1. Data diri */}
-        <Section
-          judul={adaKelompok ? "1. Data diri dan kelompok" : "1. Data diri"}
-          keterangan={
-            edit
-              ? "Perubahan nama, NIM, dan departemen juga mengubah data akun mahasiswa."
-              : undefined
-          }
-        >
-          <div className="space-y-4">
-            {adaKelompok && <h3 className="text-sm font-bold">Ketua kelompok</h3>}
-            <div className="grid gap-4 md:grid-cols-2">
-              <Kolom label="Nama" edit={edit} value={item.nama}>
-                <input
-                  className={INPUT}
-                  value={form.nama}
-                  onChange={ubah("nama")}
-                  disabled={busy}
-                />
-              </Kolom>
-
-              <Kolom label="NIM" edit={edit} value={item.nim}>
-                <input
-                  className={INPUT}
-                  value={form.nim}
-                  onChange={ubahNim}
-                  maxLength={11}
-                  disabled={busy}
-                />
-              </Kolom>
-
-              <Kolom
-                label="Departemen"
-                edit={edit}
-                value={item.departemen}
-                className="md:col-span-2"
+        {/* BARU: kartu isi pengajuan dengan tab */}
+        <section className="rounded-2xl border border-[#BAC8B1] bg-white">
+          <div
+            role="tablist"
+            aria-label="Isi pengajuan"
+            className="flex gap-6 overflow-x-auto border-b border-[#BAC8B1] px-5 pt-4 sm:px-6"
+          >
+            {TAB.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                id={`tab-${t.id}`}
+                aria-selected={tab === t.id}
+                aria-controls={`panel-${t.id}`}
+                onClick={() => setTab(t.id)}
+                className={`-mb-px whitespace-nowrap border-b-2 pb-2.5 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7B9669] ${
+                  tab === t.id
+                    ? "border-[#404E3B] text-[#404E3B]"
+                    : "border-transparent text-[#7B9669] hover:text-[#404E3B]"
+                }`}
               >
-                <select
-                  className={INPUT}
-                  value={form.departemen}
-                  onChange={ubah("departemen")}
-                  disabled={busy}
-                >
-                  <option value="">Pilih departemen</option>
-                  {pilihanDepartemen.map((dep) => (
-                    <option key={dep.kode} value={dep.kode}>
-                      {dep.nama}
-                    </option>
-                  ))}
-                </select>
-              </Kolom>
-            </div>
+                {t.label}
+              </button>
+            ))}
           </div>
 
-          {adaKelompok && (
-            <div className="space-y-4 border-t border-[#E6E6E6] pt-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="text-sm font-bold">
-                  Anggota kelompok ({daftarAnggota.length} orang)
-                </h3>
-              </div>
+          <div
+            role="tabpanel"
+            id={`panel-${tab}`}
+            aria-labelledby={`tab-${tab}`}
+            className="space-y-6 p-5 sm:p-6"
+          >
+            {/* TAB: Data diri */}
+            {tab === "data" && (
+              <>
+                {edit && (
+                  <p className="text-xs text-[#5b6b55]">
+                    Perubahan nama, NIM, dan departemen juga mengubah data akun
+                    mahasiswa.
+                  </p>
+                )}
 
-              {daftarAnggota.length === 0 && (
-                <p className="text-sm text-[#5b6b55]">Belum ada anggota.</p>
-              )}
-
-              {daftarAnggota.map((a, i) => (
-                <div
-                  key={i}
-                  className={`grid items-end gap-3 ${
-                    edit ? "md:grid-cols-2" : "md:grid-cols-3"
-                  }`}
-                >
-                  <Kolom label={`Nama anggota ${i + 1}`} edit={edit} value={a.nama}>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <Kolom label="Nama lengkap" edit={edit} value={item.nama}>
                     <input
                       className={INPUT}
-                      value={a.nama}
-                      onChange={(e) => ubahAnggota(i, "nama", e.target.value)}
+                      value={form.nama}
+                      onChange={ubah("nama")}
                       disabled={busy}
                     />
                   </Kolom>
 
-                  <Kolom label={`NIM anggota ${i + 1}`} edit={edit} value={a.nim}>
+                  <Kolom label="NIM" edit={edit} value={item.nim}>
                     <input
                       className={INPUT}
-                      value={a.nim}
-                      onChange={ubahNimAnggota(i)}
+                      value={form.nim}
+                      onChange={ubahNim}
                       maxLength={11}
                       disabled={busy}
                     />
                   </Kolom>
 
-                  {!edit && (
-                    <Kolom label="Departemen" edit={false} value={a.departemen} />
-                  )}
+                  <Kolom label="Departemen" edit={edit} value={item.departemen}>
+                    <select
+                      className={INPUT}
+                      value={form.departemen}
+                      onChange={ubah("departemen")}
+                      disabled={busy}
+                    >
+                      <option value="">Pilih departemen</option>
+                      {pilihanDepartemen.map((dep) => (
+                        <option key={dep.kode} value={dep.kode}>
+                          {dep.nama}
+                        </option>
+                      ))}
+                    </select>
+                  </Kolom>
                 </div>
-              ))}
-            </div>
-          )}
-        </Section>
 
-        {/* 2. Instansi */}
-        <Section
-          judul="2. Instansi tujuan"
-          keterangan={
-            edit
-              ? "Surat pengantar dibuat dari data terbaru saat pengajuan diverifikasi."
-              : undefined
-          }
-        >
-          {item.tempat2 ? (
-            <>
-              <div className="space-y-4">
-                <h3 className="text-sm font-bold">Instansi 1</h3>
-                {blokInstansi("", {
-                  instansi: item.instansi,
-                  alamat: item.alamat,
-                  mulai: item.tanggal_mulai,
-                  selesai: item.tanggal_selesai,
+                {adaKelompok && (
+                  <div className="space-y-4 border-t border-[#E6E6E6] pt-6">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <h3 className="text-sm font-bold">Anggota kelompok</h3>
+                      {/* +1 = ketua kelompok ikut dihitung */}
+                      <span className="text-xs text-[#5b6b55]">
+                        {daftarAnggota.length + 1} orang
+                      </span>
+                    </div>
+
+                    {daftarAnggota.length === 0 && (
+                      <p className="text-sm text-[#5b6b55]">
+                        Belum ada anggota.
+                      </p>
+                    )}
+
+                    {daftarAnggota.map((a, i) => (
+                      <div key={i} className="grid gap-4 md:grid-cols-3">
+                        <Kolom label="Nama anggota" edit={edit} value={a.nama}>
+                          <input
+                            className={INPUT}
+                            value={a.nama}
+                            onChange={(e) =>
+                              ubahAnggota(i, "nama", e.target.value)
+                            }
+                            disabled={busy}
+                          />
+                        </Kolom>
+
+                        <Kolom label="NIM" edit={edit} value={a.nim}>
+                          <input
+                            className={INPUT}
+                            value={a.nim}
+                            onChange={ubahNimAnggota(i)}
+                            maxLength={11}
+                            disabled={busy}
+                          />
+                        </Kolom>
+
+                        {!edit && (
+                          <Kolom
+                            label="Departemen"
+                            edit={false}
+                            value={a.departemen}
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* TAB: Tempat magang */}
+            {tab === "tempat" && (
+              <>
+                {edit && (
+                  <p className="text-xs text-[#5b6b55]">
+                    Surat pengantar dibuat dari data terbaru saat pengajuan
+                    diverifikasi.
+                  </p>
+                )}
+
+                {item.tempat2 ? (
+                  <>
+                    <div className="space-y-4">
+                      <h3 className="text-sm font-bold">Instansi 1</h3>
+                      {blokInstansi("", {
+                        instansi: item.instansi,
+                        alamat: item.alamat,
+                        mulai: item.tanggal_mulai,
+                        selesai: item.tanggal_selesai,
+                      })}
+                    </div>
+
+                    <div className="space-y-4 border-t border-[#E6E6E6] pt-6">
+                      <h3 className="text-sm font-bold">Instansi 2</h3>
+                      {blokInstansi("2", {
+                        instansi: item.tempat2.instansi,
+                        alamat: item.tempat2.alamat_instansi,
+                        mulai: item.tempat2.tanggal_mulai,
+                        selesai: item.tempat2.tanggal_selesai,
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  blokInstansi("", {
+                    instansi: item.instansi,
+                    alamat: item.alamat,
+                    mulai: item.tanggal_mulai,
+                    selesai: item.tanggal_selesai,
+                  })
+                )}
+              </>
+            )}
+
+            {/* TAB: Berkas */}
+            {tab === "berkas" && (
+              <>
+                {URUTAN_BERKAS.map((jenis) => {
+                  const berkas = item.daftarBerkas.find(
+                    (b) => b.jenis === jenis
+                  );
+
+                  if (berkas) return <FilePreview key={jenis} berkas={berkas} />;
+                  if (BERKAS_OPSIONAL.includes(jenis)) return null;
+
+                  return (
+                    <BerkasKosong key={jenis} label={LABEL_BERKAS[jenis]} />
+                  );
                 })}
-              </div>
 
-              <div className="space-y-4 border-t border-[#E6E6E6] pt-6">
-                <h3 className="text-sm font-bold">Instansi 2</h3>
-                {blokInstansi("2", {
-                  instansi: item.tempat2.instansi,
-                  alamat: item.tempat2.alamat_instansi,
-                  mulai: item.tempat2.tanggal_mulai,
-                  selesai: item.tempat2.tanggal_selesai,
-                })}
-              </div>
-            </>
-          ) : (
-            blokInstansi("", {
-              instansi: item.instansi,
-              alamat: item.alamat,
-              mulai: item.tanggal_mulai,
-              selesai: item.tanggal_selesai,
-            })
-          )}
-        </Section>
+                {verified && suratMagang && <FilePreview berkas={suratMagang} />}
 
-        {/* 3. Berkas */}
-        <Section judul="3. Berkas">
-          {URUTAN_BERKAS.map((jenis) => {
-            const berkas = item.daftarBerkas.find((b) => b.jenis === jenis);
-
-            if (berkas) return <FilePreview key={jenis} berkas={berkas} />;
-            if (BERKAS_OPSIONAL.includes(jenis)) return null;
-
-            return <BerkasKosong key={jenis} label={LABEL_BERKAS[jenis]} />;
-          })}
-
-          {verified && suratMagang && <FilePreview berkas={suratMagang} />}
-
-          {verified && suratMagang2 && <FilePreview berkas={suratMagang2} />}
-        </Section>
+                {verified && suratMagang2 && (
+                  <FilePreview berkas={suratMagang2} />
+                )}
+              </>
+            )}
+          </div>
+        </section>
 
         {sukses && (
           <div
